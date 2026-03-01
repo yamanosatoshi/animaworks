@@ -388,6 +388,12 @@ class ToolHandler(
         try:
             logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
+            sensitive_err = self._check_sensitive_tool_permission(name, args)
+            if sensitive_err:
+                self._log_tool_activity(name, args, tool_use_id=tool_use_id)
+                self._log_tool_result_activity(name, sensitive_err, tool_use_id=tool_use_id)
+                return self._truncate_output(sensitive_err)
+
             handler = self._dispatch.get(name)
             if handler is not None:
                 result = handler(args)

@@ -13,12 +13,14 @@ import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.execution._sanitize import ORIGIN_HUMAN
 from core.i18n import t
 from core.tooling.handler_base import (
     _BLOCKED_CMD_PATTERNS,
     _INJECTION_RE,
     _error_result,
     _is_protected_write,
+    active_session_type,
 )
 
 if TYPE_CHECKING:
@@ -45,6 +47,7 @@ class PermissionsMixin:
     _peer_activity_dirs: list[Path]
     _dispatch: dict[str, Any]
     _external: ExternalToolDispatcher
+    _session_origin: str
 
     # Section header aliases
     _CMD_SECTION_HEADERS = ("コマンド実行", "実行できるコマンド")
@@ -337,11 +340,29 @@ class PermissionsMixin:
                 )
                 return _error_result("PermissionDenied", reason)
 
+        segments = [
+            s.strip()
+            for s in re.split(r"\|(?!\|)|\&\&|\|\|", command)
+            if s.strip()
+        ]
+        for segment in segments:
+            try:
+                seg_argv = shlex.split(segment)
+            except ValueError:
+                continue
+            if self._is_pr_create_command(seg_argv):
+                err = self._check_pr_create_confirmation()
+                if err:
+                    logger.warning(
+                        "permission_denied anima=%s command=%s reason=pr_create_requires_human_chat",
+                        self._anima_name, command[:80],
+                    )
+                    return err
+
         # Layer 2.5: Per-anima denied commands from permissions.md
         permissions = self._memory.read_permissions()
         denied_items = self._parse_denied_commands(permissions)
         if denied_items:
-            segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
             for segment in segments:
                 try:
                     seg_argv = shlex.split(segment)
@@ -374,7 +395,6 @@ class PermissionsMixin:
         # Layer 4: Per-command allowlist check
         allowed = self._parse_permission_section(header)
         if allowed:
-            segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
             for segment in segments:
                 try:
                     seg_argv = shlex.split(segment)
@@ -395,9 +415,6 @@ class PermissionsMixin:
                         f"Command '{cmd_base}' not in allowed list",
                         context={"allowed_commands": allowed},
                     )
-        else:
-            segments = [command]
-
         # Layer 5: Path traversal check on all segments
         for segment in segments:
             try:
@@ -417,3 +434,46 @@ class PermissionsMixin:
                         pass
 
         return None
+
+    def _check_sensitive_tool_permission(
+        self, name: str, args: dict[str, Any],
+    ) -> str | None:
+        """Enforce additional safeguards for sensitive external actions."""
+        _ = args
+        if name == "github_create_pr":
+            return self._check_pr_create_confirmation()
+        return None
+
+    def _check_pr_create_confirmation(self) -> str | None:
+        """Require direct human-chat context for PR creation."""
+        if self._superuser:
+            return None
+        if self._session_origin == ORIGIN_HUMAN and active_session_type.get() == "chat":
+            return None
+        return _error_result(
+            "HumanConfirmationRequired",
+            (
+                "Pull request creation requires explicit human confirmation in a direct "
+                "human chat session."
+            ),
+            suggestion=(
+                "Ask the human user in chat for approval, then create the PR in that same "
+                "chat session."
+            ),
+        )
+
+    @staticmethod
+    def _is_pr_create_command(seg_argv: list[str]) -> bool:
+        """Return True for command forms that create GitHub pull requests."""
+        if not seg_argv:
+            return False
+        cmd_base = Path(seg_argv[0]).name
+        if cmd_base == "gh":
+            return len(seg_argv) >= 3 and seg_argv[1] == "pr" and seg_argv[2] == "create"
+        if cmd_base == "animaworks-tool":
+            return (
+                len(seg_argv) >= 3
+                and seg_argv[1] == "github"
+                and seg_argv[2] == "create-pr"
+            )
+        return False
