@@ -5,14 +5,16 @@
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""Notion integration for AnimaWorks.
+"""AnimaWorks Notion tool — Notion API client and tool interface.
 
-Provides:
-- NotionClient: Notion API wrapper with rate-limit retry
-- blocks_to_markdown: Convert Notion blocks to Markdown
-- get_tool_schemas(): Anthropic tool_use schemas (returns [] for use_tool)
-- cli_main(): standalone CLI entry point
-- dispatch(): routes notion_* actions
+Provides CRUD operations on Notion databases and pages via the
+Notion API v2022-06-28.  Supports simple mode (task_name + summary)
+for the default development task DB, and detailed mode (raw
+properties + arbitrary database_id) for full customization.
+
+Requires a Notion Integration token, resolved via:
+  config.json → shared/credentials.json (key: ``notion_token``)
+  → env ``$NOTION_TOKEN``.
 """
 
 from __future__ import annotations
@@ -20,522 +22,798 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+import time
 from typing import Any
 
-from core.i18n import t
-from core.tools._base import ToolConfigError, get_credential, logger
+from core.tools._base import get_credential, logger
 from core.tools._retry import retry_on_rate_limit
 
 # ── Execution Profile ─────────────────────────────────────
 
 EXECUTION_PROFILE: dict[str, dict[str, object]] = {
-    "search": {"expected_seconds": 15, "background_eligible": False},
-    "get_page": {"expected_seconds": 5, "background_eligible": False},
-    "get_page_content": {"expected_seconds": 10, "background_eligible": False},
-    "get_database": {"expected_seconds": 5, "background_eligible": False},
-    "query": {"expected_seconds": 15, "background_eligible": False},
-    "create_page": {"expected_seconds": 10, "background_eligible": False},
-    "update_page": {"expected_seconds": 10, "background_eligible": False},
-    "create_database": {"expected_seconds": 10, "background_eligible": False},
+    "create": {"expected_seconds": 10, "background_eligible": False},
+    "query":  {"expected_seconds": 15, "background_eligible": False},
+    "update": {"expected_seconds": 10, "background_eligible": False},
+    "batch":  {"expected_seconds": 120, "background_eligible": True},
 }
 
-MAX_PAYLOAD_BYTES = 500_000
-RATE_LIMIT_RETRY_MAX = 5
-RATE_LIMIT_WAIT_DEFAULT = 30
+# ── Constants ─────────────────────────────────────────────
+
+DEFAULT_DATABASE_ID = "3c7c44cc2f4a4b168ebbafe0c78bb43b"
+
+BATCH_INTERVAL = 0.35  # 350ms ≈ 2.8 req/s (safety margin for 3 req/s limit)
+
+MAX_PAYLOAD_BYTES = 500_000  # 500 KB per Notion API spec
+
+# Schema for the FB (feedback) child database created per task page
+FB_DB_SCHEMA: dict[str, Any] = {
+    "FBのID": {"title": {}},
+    "問題の概要": {"rich_text": {}},
+    "再現方法": {"rich_text": {}},
+    "期待する動作": {"rich_text": {}},
+    "タグ": {"multi_select": {}},
+    "ステータス": {
+        "select": {
+            "options": [
+                {"name": "未対応", "color": "red"},
+                {"name": "対応中", "color": "yellow"},
+                {"name": "解消済み", "color": "green"},
+            ],
+        },
+    },
+}
 
 
-# ── Exception hierarchy ───────────────────────────────────
+def build_page_url(page_id: str) -> str:
+    """Convert a Notion page ID to a valid browser URL.
+
+    Notion requires hyphens stripped and www. prefix.
+    """
+    return "https://www.notion.so/" + page_id.replace("-", "")
+
+# Category → status mapping (task_status_flow.md §4.1)
+STATUS_CATEGORIES: dict[str, list[str]] = {
+    "未着手": ["新規", "営業要望", "やりたいこと"],
+    "検討中": ["次回開発MTG確認", "仕様策定中", "仕様確認中", "デザイン作成中", "デザイン確認中"],
+    "作業準備": ["着手予定"],
+    "作業中": ["実装中"],
+    "テスト": ["機能テスト中"],
+    "リリース準備": ["SEEDマージ", "マニュアル確認中", "リリース待ち"],
+    "完了": ["デプロイ済", "済"],
+    "保留": ["pending"],
+}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Custom Exceptions
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 class NotionAPIError(Exception):
-    """Base exception for Notion API errors."""
-
-    pass
+    """Base class for Notion API errors."""
 
 
 class RateLimitError(NotionAPIError):
-    """Raised when Notion API returns HTTP 429."""
+    """429 Too Many Requests."""
 
     def __init__(self, retry_after: float, response: Any) -> None:
         self.retry_after = retry_after
         self.response = response
-        super().__init__(t("notion.rate_limited"))
+        super().__init__(f"Rate limited, retry after {retry_after}s")
 
 
 class ServerError(NotionAPIError):
-    """Raised when Notion API returns 5xx."""
+    """5xx server error."""
 
     def __init__(self, status_code: int, body: str) -> None:
         self.status_code = status_code
-        self.body = body
-        super().__init__(t("notion.server_error", status=status_code, body=body))
+        super().__init__(f"Server error {status_code}: {body[:200]}")
 
 
-# ── blocks_to_markdown ────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Retry helper
+# ──────────────────────────────────────────────────────────────────────────────
 
 
-def _rich_text_to_markdown(rich_text: list[dict[str, Any]]) -> str:
-    """Convert Notion rich_text array to Markdown with annotations."""
-    parts: list[str] = []
-    for rt in rich_text or []:
-        if rt.get("type") == "mention":
-            # Mention: user, page, database, date, etc.
-            mention = rt.get("mention", {})
-            if "page" in mention:
-                parts.append(f"[page]({build_page_url(mention['page'].get('id', ''))})")
-            elif "database" in mention:
-                parts.append("[database]")
-            elif "date" in mention:
-                date_obj = mention["date"]
-                if date_obj.get("end"):
-                    parts.append(f"{date_obj.get('start', '')} - {date_obj.get('end', '')}")
-                else:
-                    parts.append(str(date_obj.get("start", "")))
-            elif "user" in mention:
-                parts.append("[user]")
-            else:
-                parts.append(rt.get("plain_text", ""))
-            continue
-        if rt.get("type") == "equation":
-            expr = rt.get("equation", {}).get("expression", "")
-            parts.append(f"${expr}$")
-            continue
-        content = rt.get("plain_text", rt.get("text", {}).get("content", ""))
-        link = rt.get("href") or (
-            rt.get("text", {}).get("link", {}).get("url") if isinstance(rt.get("text"), dict) else None
-        )
-        ann = rt.get("annotations", {}) or {}
-        if ann.get("code"):
-            content = f"`{content}`"
-        else:
-            if ann.get("bold"):
-                content = f"**{content}**"
-            if ann.get("italic"):
-                content = f"*{content}*"
-            if ann.get("strikethrough"):
-                content = f"~~{content}~~"
-            if link:
-                content = f"[{content}]({link})"
-        parts.append(content)
-    return "".join(parts)
+def _extract_retry_after(exc: Exception) -> float | None:
+    """Extract Retry-After seconds from a RateLimitError."""
+    if isinstance(exc, RateLimitError):
+        return exc.retry_after
+    return None
 
 
-def blocks_to_markdown(blocks: list[dict[str, Any]]) -> str:
-    """Convert Notion block objects to Markdown.
-
-    Supports: paragraph, heading_1/2/3, bulleted_list_item, numbered_list_item,
-    to_do, toggle, code, quote, callout, divider, image, bookmark, link_preview,
-    table (with table_row children), child_page, child_database.
-    Unknown types become HTML comments.
-    """
-    lines: list[str] = []
-
-    for block in blocks:
-        btype = block.get("type", "unsupported")
-        if block.get("in_trash", False):
-            continue
-
-        if btype == "paragraph":
-            body = block.get("paragraph", {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            if text:
-                lines.append(text)
-            lines.append("")
-
-        elif btype in ("heading_1", "heading_2", "heading_3"):
-            level = int(btype.split("_")[1])
-            body = block.get(btype, {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"{'#' * level} {text}")
-            lines.append("")
-
-        elif btype == "bulleted_list_item":
-            body = block.get("bulleted_list_item", {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"- {text}")
-            lines.append("")
-
-        elif btype == "numbered_list_item":
-            body = block.get("numbered_list_item", {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"1. {text}")
-            lines.append("")
-
-        elif btype == "to_do":
-            body = block.get("to_do", {})
-            checked = body.get("checked", False)
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            box = "[x]" if checked else "[ ]"
-            lines.append(f"- {box} {text}")
-            lines.append("")
-
-        elif btype == "toggle":
-            body = block.get("toggle", {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            children = block.get("_children", [])
-            if children:
-                child_md = blocks_to_markdown(children)
-                lines.append("<details>")
-                lines.append(f"<summary>▶ {text}</summary>")
-                lines.append("")
-                lines.append(child_md.strip())
-                lines.append("</details>")
-            else:
-                lines.append(f"> ▶ {text}")
-            lines.append("")
-
-        elif btype == "code":
-            body = block.get("code", {})
-            lang = body.get("language", "plain text")
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"```{lang}")
-            lines.append(text)
-            lines.append("```")
-            lines.append("")
-
-        elif btype == "quote":
-            body = block.get("quote", {})
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"> {text}")
-            lines.append("")
-
-        elif btype == "callout":
-            body = block.get("callout", {})
-            icon = body.get("icon", {})
-            emoji = ""
-            if isinstance(icon, dict) and "emoji" in icon:
-                emoji = icon.get("emoji", "💡") + " "
-            text = _rich_text_to_markdown(body.get("rich_text", []))
-            lines.append(f"> {emoji}{text}")
-            lines.append("")
-
-        elif btype == "divider":
-            lines.append("---")
-            lines.append("")
-
-        elif btype == "image":
-            body = block.get("image", {})
-            url = ""
-            if body.get("type") == "external":
-                url = body.get("external", {}).get("url", "")
-            elif body.get("type") == "file":
-                url = body.get("file", {}).get("url", "")
-            caption = _rich_text_to_markdown(body.get("caption", []))
-            cap = f" {caption}" if caption else ""
-            lines.append(f"![image]({url}){cap}")
-            lines.append("")
-
-        elif btype == "bookmark":
-            body = block.get("bookmark", {})
-            url = body.get("url", "")
-            caption = _rich_text_to_markdown(body.get("caption", []))
-            text = caption or url
-            lines.append(f"[{text}]({url})")
-            lines.append("")
-
-        elif btype == "link_preview":
-            body = block.get("link_preview", {})
-            url = body.get("url", "")
-            lines.append(f"[{url}]({url})")
-            lines.append("")
-
-        elif btype == "table":
-            children = block.get("_children", [])
-            rows: list[list[str]] = []
-            for row_block in children:
-                if row_block.get("type") == "table_row":
-                    cells = row_block.get("table_row", {}).get("cells", [])
-                    row_texts = [_rich_text_to_markdown(c) for c in cells]
-                    rows.append(row_texts)
-            if rows:
-                # First row as header
-                lines.append("| " + " | ".join(rows[0]) + " |")
-                lines.append("|" + "|".join(["---"] * len(rows[0])) + "|")
-                for r in rows[1:]:
-                    lines.append("| " + " | ".join(r) + " |")
-            lines.append("")
-
-        elif btype == "child_page":
-            body = block.get("child_page", {})
-            title = body.get("title", "Untitled")
-            lines.append(f"📄 [{title}]")
-            lines.append("")
-
-        elif btype == "child_database":
-            body = block.get("child_database", {})
-            title = body.get("title", "Untitled")
-            lines.append(f"📊 [{title}]")
-            lines.append("")
-
-        else:
-            lines.append(f"<!-- unsupported: {btype} -->")
-            lines.append("")
-
-    return "\n".join(lines).rstrip()
-
-
-# ── NotionClient ──────────────────────────────────────────
-
-
-def build_page_url(page_id: str) -> str:
-    """Build Notion page URL from page_id (with or without hyphens)."""
-    clean = (page_id or "").replace("-", "")
-    if not clean:
-        return ""
-    return f"https://www.notion.so/{clean}"
+# ──────────────────────────────────────────────────────────────────────────────
+# NotionClient
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 class NotionClient:
-    """Notion API client with rate-limit retry and payload validation."""
+    """Notion API v2022-06-28 client."""
 
     BASE_URL = "https://api.notion.com/v1"
     API_VERSION = "2022-06-28"
 
-    def __init__(self, token: str) -> None:
-        self._token = token
-        self._headers = {
-            "Authorization": f"Bearer {token}",
-            "Notion-Version": self.API_VERSION,
-            "Content-Type": "application/json",
-        }
-        self._httpx: Any = None
-        self._client: Any = None
+    def __init__(self, token: str | None = None) -> None:
+        """Initialise the client.
 
-    def _get_httpx(self) -> Any:
-        if self._httpx is None:
+        Args:
+            token: Notion Integration token.  If *None*, resolved via
+                ``get_credential`` cascade or shared/credentials.json
+                nested key ``notion.integration_token``.
+        """
+        import httpx
+
+        if not token:
             try:
-                import httpx as _httpx
-
-                self._httpx = _httpx
-            except ImportError:
-                raise ImportError("notion tool requires 'httpx'. Install with: pip install httpx") from None
-        return self._httpx
-
-    def _get_client(self) -> Any:
-        """Return a reusable httpx.Client (lazy singleton)."""
-        if self._client is None:
-            httpx = self._get_httpx()
-            self._client = httpx.Client(timeout=30.0, headers=self._headers)
-        return self._client
-
-    def _request(
-        self,
-        method: str,
-        endpoint: str,
-        json_data: dict | None = None,
-        params: dict[str, Any] | None = None,
-    ) -> dict | list:
-        """Send HTTP request with rate-limit retry and payload validation."""
-        url = f"{self.BASE_URL}{endpoint}"
-
-        if json_data is not None:
-            payload_str = json.dumps(json_data, ensure_ascii=False)
-            if len(payload_str.encode("utf-8")) > MAX_PAYLOAD_BYTES:
-                raise NotionAPIError(
-                    t(
-                        "notion.payload_too_large",
-                        max_bytes=MAX_PAYLOAD_BYTES,
-                        actual_bytes=len(payload_str.encode("utf-8")),
-                    )
+                token = get_credential(
+                    "notion", "integration_token", env_var="NOTION_TOKEN",
                 )
+            except Exception:
+                from core.tools._base import _lookup_shared_credentials
 
-        def _do_request() -> dict | list:
-            client = self._get_client()
-            resp = client.request(
-                method,
-                url,
-                json=json_data,
-                params=params,
-            )
-            if resp.status_code == 429:
-                retry_after = float(resp.headers.get("Retry-After", RATE_LIMIT_WAIT_DEFAULT))
-                raise RateLimitError(retry_after, resp)
-            if 500 <= resp.status_code < 600:
-                raise ServerError(resp.status_code, resp.text[:500])
-            resp.raise_for_status()
-            if not resp.text.strip():
-                return {}
-            return resp.json()
-
-        def _get_retry_after(exc: Exception) -> float | None:
-            if isinstance(exc, RateLimitError):
-                return exc.retry_after
-            return None
-
-        return retry_on_rate_limit(
-            _do_request,
-            max_retries=RATE_LIMIT_RETRY_MAX,
-            default_wait=RATE_LIMIT_WAIT_DEFAULT,
-            get_retry_after=_get_retry_after,
-            retry_on=(RateLimitError,),
+                val = _lookup_shared_credentials("notion")
+                if isinstance(val, dict) and val.get("integration_token"):
+                    token = val["integration_token"]
+                else:
+                    raise
+        self.token = token
+        self._client = httpx.Client(
+            base_url=self.BASE_URL,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Notion-Version": self.API_VERSION,
+                "Content-Type": "application/json",
+            },
+            timeout=30.0,
         )
 
-    def search(
+    # ── CRUD ──────────────────────────────────────────────────────────────
+
+    def create_page(
         self,
-        query: str = "",
-        filter: dict[str, Any] | None = None,
-        sort: dict[str, Any] | None = None,
-        page_size: int = 10,
-        start_cursor: str | None = None,
-    ) -> dict:
-        """POST /v1/search."""
-        body: dict[str, Any] = {"page_size": page_size}
-        if query:
-            body["query"] = query
-        if filter:
-            body["filter"] = filter
-        if sort:
-            body["sort"] = sort
-        if start_cursor:
-            body["start_cursor"] = start_cursor
-        return self._request("POST", "/search", json_data=body)
+        database_id: str,
+        properties: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create a page in the specified database.
 
-    def get_page(self, page_id: str) -> dict:
-        """GET /v1/pages/{page_id}."""
-        return self._request("GET", f"/pages/{page_id}")
+        Args:
+            database_id: Target database ID.
+            properties: Notion API property format dict.
 
-    def get_page_content(
+        Returns:
+            Created page object.
+        """
+        body = {
+            "parent": {"database_id": database_id},
+            "properties": properties,
+        }
+        self._validate_payload(body)
+        return self._request("POST", "/pages", body)
+
+    def update_page(
         self,
         page_id: str,
-        page_size: int = 100,
-    ) -> dict:
-        """GET /v1/blocks/{page_id}/children (paginated), convert to markdown."""
-        all_blocks: list[dict[str, Any]] = []
-        start_cursor: str | None = None
+        properties: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update page properties.
 
-        while True:
-            params: dict[str, Any] = {"page_size": page_size}
-            if start_cursor:
-                params["start_cursor"] = start_cursor
-            data = self._request(
-                "GET",
-                f"/blocks/{page_id}/children",
-                params=params,
-            )
-            blocks = data.get("results", [])
-            all_blocks.extend(blocks)
-            has_more = data.get("has_more", False)
-            if not has_more:
-                break
-            start_cursor = data.get("next_cursor")
-            if not start_cursor:
-                break
+        Args:
+            page_id: Target page ID.
+            properties: Properties to update (partial update).
 
-        # Fetch children for blocks with has_children (table, toggle, etc.)
-        for block in all_blocks:
-            if block.get("has_children"):
-                bid = block.get("id", "")
-                child_blocks: list[dict] = []
-                ccursor: str | None = None
-                while True:
-                    cparams: dict[str, Any] = {"page_size": 100}
-                    if ccursor:
-                        cparams["start_cursor"] = ccursor
-                    cdata = self._request(
-                        "GET",
-                        f"/blocks/{bid}/children",
-                        params=cparams,
-                    )
-                    child_blocks.extend(cdata.get("results", []))
-                    if not cdata.get("has_more"):
-                        break
-                    ccursor = cdata.get("next_cursor")
-                    if not ccursor:
-                        break
-                block["_children"] = child_blocks
-
-        markdown = blocks_to_markdown(all_blocks)
-        return {
-            "page_id": page_id,
-            "markdown": markdown,
-            "blocks_count": len(all_blocks),
-        }
-
-    def get_database(self, database_id: str) -> dict:
-        """GET /v1/databases/{database_id}."""
-        return self._request("GET", f"/databases/{database_id}")
+        Returns:
+            Updated page object.
+        """
+        body = {"properties": properties}
+        return self._request("PATCH", f"/pages/{page_id}", body)
 
     def query_database(
         self,
         database_id: str,
         filter: dict[str, Any] | None = None,
         sorts: list[dict[str, Any]] | None = None,
-        page_size: int = 10,
+        page_size: int = 100,
         start_cursor: str | None = None,
-    ) -> dict:
-        """POST /v1/databases/{database_id}/query."""
-        body: dict[str, Any] = {"page_size": page_size}
+    ) -> dict[str, Any]:
+        """Query a database.
+
+        Args:
+            database_id: Target database ID.
+            filter: Notion filter object.
+            sorts: Sort conditions list.
+            page_size: Results per page (max 100).
+            start_cursor: Pagination cursor.
+
+        Returns:
+            Dict with ``results``, ``has_more``, and ``next_cursor``.
+        """
+        body: dict[str, Any] = {"page_size": min(page_size, 100)}
         if filter:
             body["filter"] = filter
         if sorts:
             body["sorts"] = sorts
         if start_cursor:
             body["start_cursor"] = start_cursor
-        return self._request("POST", f"/databases/{database_id}/query", json_data=body)
+        return self._request("POST", f"/databases/{database_id}/query", body)
 
-    def create_page(
-        self,
-        parent: dict[str, str],
-        properties: dict[str, Any],
-        children: list[dict[str, Any]] | None = None,
-    ) -> dict:
-        """POST /v1/pages. parent: {"database_id": "..."} or {"page_id": "..."}."""
-        body: dict[str, Any] = {"parent": parent, "properties": properties}
-        if children:
-            body["children"] = children
-        return self._request("POST", "/pages", json_data=body)
+    def get_page(self, page_id: str) -> dict[str, Any]:
+        """Retrieve a single page by ID.
 
-    def update_page(self, page_id: str, properties: dict[str, Any]) -> dict:
-        """PATCH /v1/pages/{page_id}."""
-        return self._request("PATCH", f"/pages/{page_id}", json_data={"properties": properties})
+        Args:
+            page_id: Target page ID.
+
+        Returns:
+            Page object.
+        """
+        return self._request("GET", f"/pages/{page_id}")
+
+    # ── Database operations ────────────────────────────────────────────────
 
     def create_database(
         self,
         parent_page_id: str,
         title: str,
         properties: dict[str, Any],
-    ) -> dict:
-        """POST /v1/databases."""
+    ) -> dict[str, Any]:
+        """Create a child database inside a Notion page.
+
+        Args:
+            parent_page_id: Parent page ID.
+            title: Database title.
+            properties: Property schema dict.
+
+        Returns:
+            Created database object.
+        """
         body = {
             "parent": {"type": "page_id", "page_id": parent_page_id},
             "title": [{"type": "text", "text": {"content": title}}],
             "properties": properties,
         }
-        return self._request("POST", "/databases", json_data=body)
+        return self._request("POST", "/databases", body)
+
+    def find_child_database(
+        self,
+        parent_page_id: str,
+        title: str,
+    ) -> dict[str, Any] | None:
+        """Check if a child database with given title already exists.
+
+        Args:
+            parent_page_id: Parent page ID.
+            title: Database title to search for.
+
+        Returns:
+            Block object if found, else None.
+        """
+        result = self._request("GET", f"/blocks/{parent_page_id}/children")
+        for block in result.get("results", []):
+            if block.get("type") == "child_database":
+                db_title = block.get("child_database", {}).get("title", "")
+                if db_title == title:
+                    return block
+        return None
+
+    # ── Batch ─────────────────────────────────────────────────────────────
+
+    def batch_create_pages(
+        self,
+        database_id: str,
+        items: list[dict[str, Any]],
+        batch_size: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Create multiple pages sequentially with rate-limit throttling.
+
+        Args:
+            database_id: Target database ID.
+            items: List of property dicts.
+            batch_size: Progress log interval.
+
+        Returns:
+            List of result dicts (``success``/``error`` mixed).
+        """
+        results: list[dict[str, Any]] = []
+        for i, props in enumerate(items):
+            if i > 0:
+                time.sleep(BATCH_INTERVAL)
+            try:
+                page = self.create_page(database_id, props)
+                results.append({"success": True, "page": page})
+            except NotionAPIError as e:
+                logger.warning("Batch item %d failed: %s", i, e)
+                results.append({"success": False, "error": str(e)})
+            if (i + 1) % batch_size == 0:
+                logger.info("Batch progress: %d/%d", i + 1, len(items))
+        return results
+
+    # ── Internal ──────────────────────────────────────────────────────────
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Execute an API request with retry on rate-limit/server errors."""
+        import httpx
+
+        def _do_request() -> dict[str, Any]:
+            response = self._client.request(method, path, json=body)
+            if response.status_code == 429:
+                retry_after = float(
+                    response.headers.get("Retry-After", "1"),
+                )
+                raise RateLimitError(retry_after, response)
+            if response.status_code >= 500:
+                raise ServerError(response.status_code, response.text)
+            response.raise_for_status()
+            return response.json()
+
+        return retry_on_rate_limit(
+            _do_request,
+            max_retries=5,
+            default_wait=30.0,
+            get_retry_after=_extract_retry_after,
+            retry_on=(RateLimitError, ServerError, httpx.ConnectError),
+        )
+
+    def _validate_payload(self, body: dict[str, Any]) -> None:
+        """Pre-check payload size against Notion's 500KB limit."""
+        size = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+        if size > MAX_PAYLOAD_BYTES:
+            raise ValueError(
+                f"Payload size {size} bytes exceeds Notion limit "
+                f"({MAX_PAYLOAD_BYTES} bytes)"
+            )
 
 
-# ── Credential resolution ────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Property helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 
-def _resolve_token(args: dict[str, Any]) -> str:
-    """Resolve Notion token: per-Anima NOTION_API_TOKEN__{name} → shared."""
-    anima_dir = args.get("anima_dir")
-    if anima_dir:
-        from core.tools._base import _lookup_shared_credentials, _lookup_vault_credential
+def _build_default_properties(
+    task_name: str,
+    summary: str,
+    status: str = "新規",
+    labels: list[str] | None = None,
+) -> dict[str, Any]:
+    """Convert simple-mode params to Notion API properties.
 
-        anima_name = Path(anima_dir).name
-        per_key = f"NOTION_API_TOKEN__{anima_name}"
-        token = _lookup_vault_credential(per_key)
-        if token:
-            logger.debug("Using per-Anima Notion token for '%s'", anima_name)
-            return token
-        token = _lookup_shared_credentials(per_key)
-        if token:
-            logger.debug("Using per-Anima Notion token for '%s'", anima_name)
-            return token
-    try:
-        return get_credential("notion", "notion", env_var="NOTION_API_TOKEN")
-    except ToolConfigError:
-        raise ToolConfigError(t("notion.config_error")) from None
+    Maps to the 4 properties confirmed in notion_schema_mapping.md:
+      - Name (title) ← task_name
+      - Status (select) ← status
+      - Label (multi_select) ← labels
+      - AIによる要約 (rich_text) ← summary (truncated to 2000 chars)
+    """
+    if labels is None:
+        labels = ["AI"]
+    return {
+        "Name": {"title": [{"text": {"content": task_name}}]},
+        "Status": {"select": {"name": status}},
+        "Label": {"multi_select": [{"name": l} for l in labels]},
+        "AIによる要約": {
+            "rich_text": [{"text": {"content": summary[:2000]}}],
+        },
+    }
 
 
-# ── Tool schemas & CLI ────────────────────────────────────
+def _build_category_filter(category: str) -> dict[str, Any]:
+    """Convert a category name to a Notion filter object.
+
+    Based on task_status_flow.md §4.1 category definitions.
+
+    Raises:
+        ValueError: If the category name is not recognised.
+    """
+    statuses = STATUS_CATEGORIES.get(category)
+    if not statuses:
+        raise ValueError(
+            f"Unknown category: {category}. "
+            f"Valid: {', '.join(STATUS_CATEGORIES.keys())}"
+        )
+    if len(statuses) == 1:
+        return {"property": "Status", "select": {"equals": statuses[0]}}
+    return {
+        "or": [
+            {"property": "Status", "select": {"equals": s}}
+            for s in statuses
+        ],
+    }
 
 
-def get_tool_schemas() -> list[dict]:
-    """Return Anthropic tool_use schemas. External tools use use_tool."""
-    return []
+def _resolve_database_id(database_id: str | None = None) -> str:
+    """Resolve database ID, falling back to credentials.json then constant."""
+    if database_id:
+        return database_id
+    from core.tools._base import _lookup_shared_credentials
+
+    db_id = _lookup_shared_credentials("notion_database_id")
+    if db_id:
+        return db_id
+    return DEFAULT_DATABASE_ID
+
+
+def find_task_page_id(
+    client: NotionClient,
+    task_number: str,
+    database_id: str | None = None,
+) -> str | None:
+    """Find a task page ID by task number (e.g. 'TASK-3296').
+
+    Queries the default development task DB and searches the Name
+    (title) property for a match containing *task_number*.
+
+    Args:
+        client: NotionClient instance.
+        task_number: Task identifier (e.g. ``"TASK-3296"``).
+        database_id: Override DB ID. Falls back to default.
+
+    Returns:
+        Page ID string, or *None* if not found.
+    """
+    db_id = _resolve_database_id(database_id)
+    result = client.query_database(
+        database_id=db_id,
+        filter={
+            "property": "Name",
+            "title": {"contains": task_number},
+        },
+        page_size=1,
+    )
+    pages = result.get("results", [])
+    if pages:
+        return pages[0]["id"]
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dispatch helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _dispatch_create(
+    client: NotionClient,
+    db_id: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle notion_create dispatch."""
+    # Detailed mode: raw properties take precedence
+    raw_props = args.get("properties")
+    if raw_props:
+        return client.create_page(db_id, raw_props)
+
+    # Simple mode: task_name + summary required
+    task_name = args.get("task_name")
+    summary = args.get("summary")
+    if not task_name or not summary:
+        raise ValueError(
+            "Either 'properties' (detailed mode) or both "
+            "'task_name' and 'summary' (simple mode) are required."
+        )
+    properties = _build_default_properties(
+        task_name=task_name,
+        summary=summary,
+        status=args.get("status", "新規"),
+        labels=args.get("labels"),
+    )
+    return client.create_page(db_id, properties)
+
+
+def _dispatch_query(
+    client: NotionClient,
+    db_id: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle notion_query dispatch."""
+    # Build filter: category_filter > status_filter > raw filter
+    filter_obj = args.get("filter")
+    category = args.get("category_filter")
+    status = args.get("status_filter")
+
+    if category:
+        filter_obj = _build_category_filter(category)
+    elif status:
+        filter_obj = {"property": "Status", "select": {"equals": status}}
+
+    return client.query_database(
+        database_id=db_id,
+        filter=filter_obj,
+        sorts=args.get("sorts"),
+        page_size=args.get("page_size", 100),
+    )
+
+
+def _dispatch_update(
+    client: NotionClient,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle notion_update dispatch."""
+    page_id = args["page_id"]
+
+    # Detailed mode: raw properties
+    raw_props = args.get("properties")
+    if raw_props:
+        return client.update_page(page_id, raw_props)
+
+    # Simple mode: status shorthand
+    status = args.get("status")
+    if status:
+        properties = {"Status": {"select": {"name": status}}}
+        return client.update_page(page_id, properties)
+
+    raise ValueError(
+        "Either 'properties' (detailed mode) or 'status' "
+        "(simple mode) is required for update."
+    )
+
+
+def _dispatch_create_fb_db(
+    client: NotionClient,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle notion_create_fb_db dispatch.
+
+    Finds the task page, checks for existing FB DB, creates if missing.
+    """
+    task_number = args["task_number"]
+    page_id = find_task_page_id(client, task_number)
+    if not page_id:
+        raise ValueError(f"Task page not found for: {task_number}")
+
+    existing = client.find_child_database(page_id, "FB一覧")
+    if existing:
+        db_id = existing["id"]
+        return {
+            "status": "already_exists",
+            "database_id": db_id,
+            "url": build_page_url(db_id),
+        }
+
+    db = client.create_database(page_id, "FB一覧", FB_DB_SCHEMA)
+    return {
+        "status": "created",
+        "database_id": db["id"],
+        "url": build_page_url(db["id"]),
+    }
+
+
+def _dispatch_add_fb(
+    client: NotionClient,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle notion_add_fb dispatch.
+
+    Adds a feedback record to an existing FB一覧 database.
+    """
+    db_id = args["db_id"]
+    properties: dict[str, Any] = {
+        "FBのID": {"title": [{"text": {"content": args["fb_id"]}}]},
+    }
+    if args.get("問題の概要"):
+        properties["問題の概要"] = {
+            "rich_text": [{"text": {"content": args["問題の概要"][:2000]}}],
+        }
+    if args.get("再現方法"):
+        properties["再現方法"] = {
+            "rich_text": [{"text": {"content": args["再現方法"][:2000]}}],
+        }
+    if args.get("期待する動作"):
+        properties["期待する動作"] = {
+            "rich_text": [{"text": {"content": args["期待する動作"][:2000]}}],
+        }
+    if args.get("タグ"):
+        properties["タグ"] = {
+            "multi_select": [{"name": t} for t in args["タグ"]],
+        }
+    status_name = args.get("ステータス", "未対応")
+    properties["ステータス"] = {"select": {"name": status_name}}
+
+    page = client.create_page(db_id, properties)
+    return {
+        "page_id": page["id"],
+        "url": build_page_url(page["id"]),
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tool schemas (Anthropic tool_use format)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def get_tool_schemas() -> list[dict[str, Any]]:
+    """Return Anthropic-compatible tool schemas for Notion operations."""
+    return [
+        {
+            "name": "notion_create",
+            "description": (
+                "Notion DBにページを作成する。"
+                "簡易モード: task_name + summary で開発task元DBに登録。"
+                "詳細モード: database_id + properties でフルカスタマイズ。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "task_name": {
+                        "type": "string",
+                        "description": (
+                            "タスク名。簡易モード用"
+                            "（database_id省略時に使用）"
+                        ),
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "AI要約テキスト。簡易モード用",
+                    },
+                    "database_id": {
+                        "type": "string",
+                        "description": (
+                            "対象DB ID。省略時はデフォルトDB"
+                            "（開発task元DB）"
+                        ),
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": (
+                            "Notion APIプロパティ形式。"
+                            "指定時はtask_name/summaryより優先"
+                        ),
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "ステータス名。デフォルト: 新規",
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "ラベル名のリスト。デフォルト: ['AI']",
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "notion_query",
+            "description": (
+                "Notion DBをクエリする。"
+                "フィルタ・ソート・ページネーション対応。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "database_id": {
+                        "type": "string",
+                        "description": "対象DB ID。省略時はデフォルトDB",
+                    },
+                    "filter": {
+                        "type": "object",
+                        "description": "Notion filter object",
+                    },
+                    "sorts": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "ソート条件のリスト",
+                    },
+                    "page_size": {
+                        "type": "integer",
+                        "description": "取得件数 (1-100, デフォルト 100)",
+                    },
+                    "status_filter": {
+                        "type": "string",
+                        "description": (
+                            "簡易フィルタ: ステータス名で絞り込み"
+                            "（例: '新規', '実装中'）"
+                        ),
+                    },
+                    "category_filter": {
+                        "type": "string",
+                        "description": (
+                            "カテゴリフィルタ: '未着手', '検討中', "
+                            "'作業中' 等（task_status_flow.md §4.1準拠）"
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "notion_update",
+            "description": "Notion DBのページプロパティを更新する。",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "page_id": {
+                        "type": "string",
+                        "description": "更新対象のページID",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": (
+                            "更新するプロパティ（Notion API形式）"
+                        ),
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": (
+                            "簡易モード: ステータス名を直接指定"
+                            "（例: '実装中'）"
+                        ),
+                    },
+                },
+                "required": ["page_id"],
+            },
+        },
+        {
+            "name": "notion_create_fb_db",
+            "description": (
+                "タスクのNotionページ内に「FB一覧」子DBを作成する。"
+                "既に存在する場合はスキップしてURLを返す。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "task_number": {
+                        "type": "string",
+                        "description": (
+                            "タスク番号（例: 'TASK-3296'）。"
+                            "開発task元DBからページを検索する"
+                        ),
+                    },
+                },
+                "required": ["task_number"],
+            },
+        },
+        {
+            "name": "notion_add_fb",
+            "description": (
+                "FB一覧DBにフィードバックレコードを追加する。"
+                "db_idはnotion_create_fb_dbの戻り値から取得する。"
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "db_id": {
+                        "type": "string",
+                        "description": "FB一覧DBのID",
+                    },
+                    "fb_id": {
+                        "type": "string",
+                        "description": "FBのID（タイトル）",
+                    },
+                    "問題の概要": {
+                        "type": "string",
+                        "description": "問題の概要テキスト",
+                    },
+                    "再現方法": {
+                        "type": "string",
+                        "description": "再現方法テキスト",
+                    },
+                    "期待する動作": {
+                        "type": "string",
+                        "description": "期待する動作テキスト",
+                    },
+                    "タグ": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "タグ名のリスト",
+                    },
+                    "ステータス": {
+                        "type": "string",
+                        "description": (
+                            "ステータス（未対応/対応中/解消済み）。"
+                            "デフォルト: 未対応"
+                        ),
+                    },
+                },
+                "required": ["db_id", "fb_id"],
+            },
+        },
+    ]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI entry point
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def get_cli_guide() -> str:
@@ -543,288 +821,137 @@ def get_cli_guide() -> str:
     return """\
 ### Notion
 ```bash
-animaworks-tool notion search [query] -j
-animaworks-tool notion get-page <page_id> -j
-animaworks-tool notion get-page-content <page_id> -j
-animaworks-tool notion get-database <database_id> -j
-animaworks-tool notion query <database_id> [--filter JSON] -j
-animaworks-tool notion create-page --parent-page-id <id> --properties JSON -j
-animaworks-tool notion update-page <page_id> --properties JSON -j
-animaworks-tool notion create-database --parent-page-id <id> --title "..." --properties JSON -j
+# Create (simple mode)
+animaworks-tool notion create --task-name "タスク名" --summary "要約" -j
+
+# Create (detailed mode)
+animaworks-tool notion create --database-id "xxx" --properties '{"Name":...}' -j
+
+# Query
+animaworks-tool notion query -j
+animaworks-tool notion query --status "新規" -j
+animaworks-tool notion query --category "未着手" -j
+
+# Update
+animaworks-tool notion update --page-id "xxx" --status "実装中" -j
 ```"""
 
 
 def cli_main(argv: list[str] | None = None) -> None:
-    """Standalone CLI entry point for the Notion tool."""
+    """Standalone CLI for Notion operations.
+
+    Sub-commands::
+
+        create    Create a page (simple or detailed mode)
+        query     Query a database
+        update    Update a page's properties
+        get       Retrieve a single page
+    """
     parser = argparse.ArgumentParser(
         prog="animaworks-notion",
-        description=t("notion.cli_desc"),
+        description="AnimaWorks Notion CLI",
     )
-    sub = parser.add_subparsers(dest="command", help="Command")
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    # search
-    p = sub.add_parser("search", help="Search Notion")
-    p.add_argument("query", nargs="*", help="Search query")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
-
-    # get-page
-    p = sub.add_parser("get-page", help="Get page metadata")
-    p.add_argument("page_id", help="Page ID")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
-
-    # get-page-content
-    p = sub.add_parser("get-page-content", help="Get page content as markdown")
-    p.add_argument("page_id", help="Page ID")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
-
-    # get-database
-    p = sub.add_parser("get-database", help="Get database metadata")
-    p.add_argument("database_id", help="Database ID")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
+    # create
+    p_create = sub.add_parser("create", help="Create a page")
+    p_create.add_argument("--task-name", default=None, help="Task name (simple mode)")
+    p_create.add_argument("--summary", default=None, help="Summary text (simple mode)")
+    p_create.add_argument("--database-id", default=None, help="Database ID")
+    p_create.add_argument("--properties", default=None, help="Properties JSON (detailed mode)")
+    p_create.add_argument("--status", default="新規", help="Status name")
+    p_create.add_argument("--labels", nargs="*", default=None, help="Label names")
 
     # query
-    p = sub.add_parser("query", help="Query database")
-    p.add_argument("database_id", help="Database ID")
-    p.add_argument("--filter", help="Filter JSON")
-    p.add_argument("--sorts", help="Sorts JSON array")
-    p.add_argument("-n", "--page-size", type=int, default=10, help="Page size")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
+    p_query = sub.add_parser("query", help="Query a database")
+    p_query.add_argument("--database-id", default=None, help="Database ID")
+    p_query.add_argument("--status", default=None, help="Status filter")
+    p_query.add_argument("--category", default=None, help="Category filter")
+    p_query.add_argument("--filter", default=None, help="Notion filter JSON")
+    p_query.add_argument("--page-size", type=int, default=100, help="Results per page")
 
-    # create-page
-    p = sub.add_parser("create-page", help="Create page")
-    p.add_argument("--parent-page-id", help="Parent page ID")
-    p.add_argument("--parent-database-id", help="Parent database ID")
-    p.add_argument("--properties", required=True, help="Properties JSON")
-    p.add_argument("--children", help="Children blocks JSON (optional)")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
+    # update
+    p_update = sub.add_parser("update", help="Update a page")
+    p_update.add_argument("--page-id", required=True, help="Page ID")
+    p_update.add_argument("--status", default=None, help="New status name")
+    p_update.add_argument("--properties", default=None, help="Properties JSON")
 
-    # update-page
-    p = sub.add_parser("update-page", help="Update page")
-    p.add_argument("page_id", help="Page ID")
-    p.add_argument("--properties", required=True, help="Properties JSON")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
-
-    # create-database
-    p = sub.add_parser("create-database", help="Create database")
-    p.add_argument("--parent-page-id", required=True, help="Parent page ID")
-    p.add_argument("--title", required=True, help="Database title")
-    p.add_argument("--properties", required=True, help="Properties JSON")
-    p.add_argument("-j", "--json", action="store_true", help="Output as JSON")
+    # get
+    p_get = sub.add_parser("get", help="Get a page")
+    p_get.add_argument("page_id", help="Page ID")
 
     args = parser.parse_args(argv)
+    client = NotionClient()
 
-    if not args.command:
-        parser.print_help()
-        sys.exit(0)
-
-    try:
-        token = _resolve_cli_token()
-        client = NotionClient(token=token)
-    except ToolConfigError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        _run_cli_command(client, args)
-    except NotionAPIError as e:
-        print(f"Notion API error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except KeyboardInterrupt:
-        print("\nInterrupted.", file=sys.stderr)
-        sys.exit(130)
-
-
-def _resolve_cli_token() -> str:
-    """Resolve token for CLI (ANIMAWORKS_ANIMA_DIR env)."""
-    import os
-
-    args = {"anima_dir": os.environ.get("ANIMAWORKS_ANIMA_DIR")}
-    return _resolve_token(args)
-
-
-def _run_cli_command(client: NotionClient, args: argparse.Namespace) -> None:
-    """Dispatch CLI subcommands."""
-    out_json = getattr(args, "json", False)
-
-    if args.command == "search":
-        query = " ".join(getattr(args, "query", []) or [])
-        result = client.search(query=query, page_size=20)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    if args.command == "create":
+        db_id = _resolve_database_id(args.database_id)
+        if args.properties:
+            props = json.loads(args.properties)
+            result = client.create_page(db_id, props)
         else:
-            for item in result.get("results", []):
-                obj = item.get("object", "")
-                tid = item.get("id", "")
-                if obj == "page":
-                    title = "Untitled"
-                    props = item.get("properties", {})
-                    for _k, v in props.items():
-                        if isinstance(v, dict) and v.get("type") == "title":
-                            tarr = v.get("title", [])
-                            if tarr:
-                                title = tarr[0].get("plain_text", "Untitled")
-                            break
-                    print(f"Page: {title} ({build_page_url(tid)})")
-                elif obj == "database":
-                    title_arr = item.get("title", [])
-                    title = title_arr[0].get("plain_text", "Untitled") if title_arr else "Untitled"
-                    print(f"Database: {title} ({tid})")
-
-    elif args.command == "get-page":
-        result = client.get_page(args.page_id)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-
-    elif args.command == "get-page-content":
-        result = client.get_page_content(args.page_id)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(result.get("markdown", ""))
-
-    elif args.command == "get-database":
-        result = client.get_database(args.database_id)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+            if not args.task_name or not args.summary:
+                parser.error("--task-name and --summary are required in simple mode")
+            props = _build_default_properties(
+                task_name=args.task_name,
+                summary=args.summary,
+                status=args.status,
+                labels=args.labels,
+            )
+            result = client.create_page(db_id, props)
 
     elif args.command == "query":
+        db_id = _resolve_database_id(args.database_id)
         filter_obj = None
-        if getattr(args, "filter", None):
+        if args.category:
+            filter_obj = _build_category_filter(args.category)
+        elif args.status:
+            filter_obj = {"property": "Status", "select": {"equals": args.status}}
+        elif args.filter:
             filter_obj = json.loads(args.filter)
-        sorts_obj = None
-        if getattr(args, "sorts", None):
-            sorts_obj = json.loads(args.sorts)
         result = client.query_database(
-            args.database_id,
+            database_id=db_id,
             filter=filter_obj,
-            sorts=sorts_obj,
-            page_size=getattr(args, "page_size", 10),
+            page_size=args.page_size,
         )
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+    elif args.command == "update":
+        if args.properties:
+            props = json.loads(args.properties)
+            result = client.update_page(args.page_id, props)
+        elif args.status:
+            props = {"Status": {"select": {"name": args.status}}}
+            result = client.update_page(args.page_id, props)
         else:
-            for row in result.get("results", []):
-                print(json.dumps(row, ensure_ascii=False, default=str))
+            parser.error("--status or --properties required")
 
-    elif args.command == "create-page":
-        parent_page_id = getattr(args, "parent_page_id", None)
-        parent_database_id = getattr(args, "parent_database_id", None)
-        if not parent_page_id and not parent_database_id:
-            print(t("notion.parent_required"), file=sys.stderr)
-            sys.exit(1)
-        parent: dict[str, str] = (
-            {"type": "page_id", "page_id": parent_page_id}
-            if parent_page_id
-            else {"type": "database_id", "database_id": parent_database_id}
-        )
-        properties = json.loads(args.properties)
-        children = None
-        if getattr(args, "children", None):
-            children = json.loads(args.children)
-        result = client.create_page(parent=parent, properties=properties, children=children)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Created: {build_page_url(result.get('id', ''))}")
+    elif args.command == "get":
+        result = client.get_page(args.page_id)
 
-    elif args.command == "update-page":
-        properties = json.loads(args.properties)
-        result = client.update_page(args.page_id, properties)
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Updated: {build_page_url(args.page_id)}")
+    else:
+        parser.print_help()
+        sys.exit(1)
 
-    elif args.command == "create-database":
-        properties = json.loads(args.properties)
-        result = client.create_database(
-            parent_page_id=args.parent_page_id,
-            title=args.title,
-            properties=properties,
-        )
-        if out_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Created database: {result.get('id', '')}")
+    json.dump(result, sys.stdout, indent=2, ensure_ascii=False, default=str)
+    print()  # trailing newline
 
 
-# ── Dispatch ──────────────────────────────────────────────
+# ── Dispatch ──────────────────────────────────────────
 
 
-def dispatch(name: str, args: dict[str, Any]) -> Any:
-    """Dispatch a tool call by schema name."""
-    token = _resolve_token(args)
-    client = NotionClient(token=token)
+def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
+    """Dispatch a tool call to the appropriate handler."""
+    args.pop("anima_dir", None)
+    client = NotionClient()
+    db_id = _resolve_database_id(args.get("database_id"))
 
-    if name == "notion_search":
-        return client.search(
-            query=args.get("query", ""),
-            filter=args.get("filter"),
-            sort=args.get("sort"),
-            page_size=args.get("page_size", 10),
-            start_cursor=args.get("start_cursor"),
-        )
-    if name == "notion_get_page":
-        page_id = args.get("page_id")
-        if not page_id:
-            raise ValueError(t("notion.page_id_required"))
-        return client.get_page(page_id)
-    if name == "notion_get_page_content":
-        page_id = args.get("page_id")
-        if not page_id:
-            raise ValueError(t("notion.page_id_required"))
-        return client.get_page_content(page_id, page_size=args.get("page_size", 100))
-    if name == "notion_get_database":
-        database_id = args.get("database_id")
-        if not database_id:
-            raise ValueError(t("notion.database_id_required"))
-        return client.get_database(database_id)
-    if name == "notion_query":
-        database_id = args.get("database_id")
-        if not database_id:
-            raise ValueError(t("notion.database_id_required"))
-        return client.query_database(
-            database_id,
-            filter=args.get("filter"),
-            sorts=args.get("sorts"),
-            page_size=args.get("page_size", 10),
-            start_cursor=args.get("start_cursor"),
-        )
-    if name == "notion_create_page":
-        parent_page_id = args.get("parent_page_id")
-        parent_database_id = args.get("parent_database_id")
-        if not parent_page_id and not parent_database_id:
-            raise ValueError(t("notion.parent_required"))
-        parent = (
-            {"type": "page_id", "page_id": parent_page_id}
-            if parent_page_id
-            else {"type": "database_id", "database_id": parent_database_id}
-        )
-        return client.create_page(
-            parent=parent,
-            properties=args.get("properties", {}),
-            children=args.get("children"),
-        )
-    if name == "notion_update_page":
-        page_id = args.get("page_id")
-        if not page_id:
-            raise ValueError(t("notion.page_id_required"))
-        return client.update_page(page_id, args.get("properties", {}))
-    if name == "notion_create_database":
-        parent_page_id = args.get("parent_page_id")
-        if not parent_page_id:
-            raise ValueError(t("notion.parent_page_id_required"))
-        return client.create_database(
-            parent_page_id=parent_page_id,
-            title=args.get("title", ""),
-            properties=args.get("properties", {}),
-        )
-    raise ValueError(t("notion.unknown_action", name=name))
-
-
-if __name__ == "__main__":
-    cli_main()
+    if tool_name == "notion_create":
+        return _dispatch_create(client, db_id, args)
+    if tool_name == "notion_query":
+        return _dispatch_query(client, db_id, args)
+    if tool_name == "notion_update":
+        return _dispatch_update(client, args)
+    if tool_name == "notion_create_fb_db":
+        return _dispatch_create_fb_db(client, args)
+    if tool_name == "notion_add_fb":
+        return _dispatch_add_fb(client, args)
+    raise ValueError(f"Unknown tool: {tool_name}")
