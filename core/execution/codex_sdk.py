@@ -45,6 +45,14 @@ logger = logging.getLogger("animaworks.execution.codex_sdk")
 __all__ = ["CodexSDKExecutor", "clear_codex_thread_ids", "is_codex_sdk_available"]
 
 RESUME_TIMEOUT_SEC = 15.0
+_MESSAGE_ITEM_TYPES = {"message", "agent_message"}
+_TOOL_ITEM_TYPES = {
+    "tool_use",
+    "mcp_tool_call",
+    "command_execution",
+    "file_change",
+    "web_search",
+}
 
 
 # ── Model name helpers ───────────────────────────────────────
@@ -144,10 +152,34 @@ def _extract_item_text(item: Any) -> str:
 def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
     """Convert a Codex tool_use item to a ``ToolCallRecord``."""
     try:
-        name = getattr(item, "name", "unknown")
+        item_type = getattr(item, "type", "") or ""
+        if item_type == "tool_use":
+            name = getattr(item, "name", "unknown")
+            input_data = getattr(item, "input", {})
+            result_data = getattr(item, "output", "")
+        elif item_type == "mcp_tool_call":
+            server = getattr(item, "server", "")
+            tool = getattr(item, "tool", "mcp_tool_call")
+            name = f"{server}/{tool}" if server else tool
+            input_data = getattr(item, "arguments", {})
+            result_data = getattr(item, "result", "") or getattr(item, "error", "")
+        elif item_type == "command_execution":
+            name = "command_execution"
+            input_data = getattr(item, "command", "")
+            result_data = getattr(item, "aggregated_output", "")
+        elif item_type == "file_change":
+            name = "file_change"
+            input_data = getattr(item, "changes", [])
+            result_data = getattr(item, "status", "")
+        elif item_type == "web_search":
+            name = "web_search"
+            input_data = {"query": getattr(item, "query", "")}
+            result_data = ""
+        else:
+            name = item_type or "unknown"
+            input_data = getattr(item, "input", {})
+            result_data = getattr(item, "output", "")
         tool_id = getattr(item, "id", "")
-        input_data = getattr(item, "input", {})
-        result_data = getattr(item, "output", "")
         return ToolCallRecord(
             tool_name=name,
             tool_id=tool_id,
@@ -161,7 +193,7 @@ def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
 def _extract_tool_records(items: list[Any]) -> list[ToolCallRecord]:
     records: list[ToolCallRecord] = []
     for item in items:
-        if getattr(item, "type", None) == "tool_use":
+        if getattr(item, "type", None) in _TOOL_ITEM_TYPES:
             rec = _item_to_tool_record(item)
             if rec:
                 records.append(rec)
@@ -531,20 +563,20 @@ class CodexSDKExecutor(BaseExecutor):
                 if etype == "item.completed":
                     item = event.item
                     item_type = getattr(item, "type", "")
-                    if item_type == "message":
+                    if item_type in _MESSAGE_ITEM_TYPES:
                         text = _extract_item_text(item)
                         if text:
                             response_text_parts.append(text)
                             yield {"type": "text_delta", "text": text}
-                    elif item_type == "tool_use":
-                        tool_name = getattr(item, "name", "unknown")
+                    elif item_type in _TOOL_ITEM_TYPES:
+                        rec = _item_to_tool_record(item)
+                        tool_name = rec.tool_name if rec else item_type
                         tool_id = getattr(item, "id", "")
                         yield {
                             "type": "tool_start",
                             "tool_name": tool_name,
                             "tool_id": tool_id,
                         }
-                        rec = _item_to_tool_record(item)
                         if rec:
                             all_tool_records.append(rec)
                         yield {
