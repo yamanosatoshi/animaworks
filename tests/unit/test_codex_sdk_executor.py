@@ -365,6 +365,47 @@ class TestBlockingExecution:
 
 class TestStreamingExecution:
     @pytest.mark.asyncio
+    async def test_stream_agent_message_item_yields_text(self, executor):
+        msg_item = MagicMock()
+        msg_item.type = "agent_message"
+        msg_item.text = "Agent message text"
+
+        msg_event = MagicMock()
+        msg_event.type = "item.completed"
+        msg_event.item = msg_item
+
+        done_event = MagicMock()
+        done_event.type = "turn.completed"
+        done_event.usage = None
+
+        async def fake_events():
+            yield msg_event
+            yield done_event
+
+        mock_streamed = MagicMock()
+        mock_streamed.events = fake_events()
+
+        mock_thread = MagicMock()
+        mock_thread.run_streamed = AsyncMock(return_value=mock_streamed)
+        mock_thread.id = "stream-thread-agent-message"
+
+        mock_codex = MagicMock()
+        mock_codex.start_thread.return_value = mock_thread
+
+        events = []
+        with patch.object(executor, "_create_codex_client", return_value=mock_codex):
+            tracker = ContextTracker(model="codex/o4-mini")
+            async for ev in executor.execute_streaming(
+                system_prompt="test",
+                prompt="Hello",
+                tracker=tracker,
+            ):
+                events.append(ev)
+
+        done_ev = next(e for e in events if e["type"] == "done")
+        assert "Agent message text" in done_ev["full_text"]
+
+    @pytest.mark.asyncio
     async def test_stream_yields_events(self, executor, anima_dir):
         msg_item = MagicMock()
         msg_item.type = "message"
