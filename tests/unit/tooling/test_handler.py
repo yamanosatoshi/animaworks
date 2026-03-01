@@ -788,6 +788,22 @@ class TestCommandPermissions:
         parsed = json.loads(result)
         assert parsed["error_type"] == "HumanConfirmationRequired"
 
+    def test_git_push_requires_human_chat(self, handler: ToolHandler, memory: MagicMock):
+        memory.read_permissions.return_value = "## コマンド実行\n全般的なコマンド"
+        result = handler._check_command_permission("git push origin main")
+        parsed = json.loads(result)
+        assert parsed["error_type"] == "HumanConfirmationRequired"
+
+    def test_git_push_allowed_in_human_chat(self, handler: ToolHandler, memory: MagicMock):
+        memory.read_permissions.return_value = "## コマンド実行\n全般的なコマンド"
+        handler.set_session_origin(ORIGIN_HUMAN)
+        token = active_session_type.set("chat")
+        try:
+            result = handler._check_command_permission("git push origin main")
+        finally:
+            active_session_type.reset(token)
+        assert result is None
+
 
 # ── Injection / blocked pattern regex tests ──────────────────
 
