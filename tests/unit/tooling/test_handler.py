@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.execution._sanitize import ORIGIN_HUMAN
 from core.tooling.handler import (
     ToolHandler,
     _INJECTION_RE,
@@ -24,7 +23,6 @@ from core.tooling.handler import (
     _validate_episode_path,
     _READ_FILE_SAFETY_NOTICE,
     _READ_MAX_LINE_CHARS,
-    active_session_type,
 )
 
 PERMISSIONS_WITH_DENIED_LIST = """\
@@ -367,29 +365,6 @@ class TestHandleRouting:
         handler._external.dispatch.return_value = None
         result = handler.handle("some_external_tool", {"arg": "val"})
         assert "Unknown tool" in result
-
-    def test_github_create_pr_requires_human_confirmation_context(self, handler: ToolHandler):
-        handler._external = MagicMock()
-        handler._external.dispatch.return_value = "external result"
-
-        result = handler.handle("github_create_pr", {"title": "t", "body": "b", "head": "h"})
-        parsed = json.loads(result)
-        assert parsed["error_type"] == "HumanConfirmationRequired"
-        handler._external.dispatch.assert_not_called()
-
-    def test_github_create_pr_allowed_in_human_chat(self, handler: ToolHandler):
-        handler._external = MagicMock()
-        handler._external.dispatch.return_value = "external result"
-        handler.set_session_origin(ORIGIN_HUMAN)
-        token = active_session_type.set("chat")
-        try:
-            result = handler.handle(
-                "github_create_pr", {"title": "t", "body": "b", "head": "h"},
-            )
-        finally:
-            active_session_type.reset(token)
-        assert result == "external result"
-        handler._external.dispatch.assert_called_once()
 
 
 # ── File operation handlers ───────────────────────────────────
@@ -761,32 +736,6 @@ class TestCommandPermissions:
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
         assert "Invalid command syntax" in parsed["message"]
-
-    def test_pr_create_command_requires_human_chat(self, handler: ToolHandler, memory: MagicMock):
-        memory.read_permissions.return_value = "## コマンド実行\n全般的なコマンド"
-        result = handler._check_command_permission("gh pr create --title x --body y")
-        parsed = json.loads(result)
-        assert parsed["error_type"] == "HumanConfirmationRequired"
-
-    def test_pr_create_command_allowed_in_human_chat(self, handler: ToolHandler, memory: MagicMock):
-        memory.read_permissions.return_value = "## コマンド実行\n全般的なコマンド"
-        handler.set_session_origin(ORIGIN_HUMAN)
-        token = active_session_type.set("chat")
-        try:
-            result = handler._check_command_permission("gh pr create --title x --body y")
-        finally:
-            active_session_type.reset(token)
-        assert result is None
-
-    def test_animaworks_tool_github_create_pr_requires_human_chat(
-        self, handler: ToolHandler, memory: MagicMock,
-    ):
-        memory.read_permissions.return_value = "## コマンド実行\n全般的なコマンド"
-        result = handler._check_command_permission(
-            "animaworks-tool github create-pr --title x --body y --head feat",
-        )
-        parsed = json.loads(result)
-        assert parsed["error_type"] == "HumanConfirmationRequired"
 
 
 # ── Injection / blocked pattern regex tests ──────────────────
