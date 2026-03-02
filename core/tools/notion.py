@@ -227,7 +227,7 @@ class NotionClient:
         Returns:
             Dict with ``results``, ``has_more``, and ``next_cursor``.
         """
-        body: dict[str, Any] = {"page_size": min(page_size, 100)}
+        body: dict[str, Any] = {"page_size": max(1, min(page_size, 100))}
         if filter:
             body["filter"] = filter
         if sorts:
@@ -340,9 +340,11 @@ class NotionClient:
         def _do_request() -> dict[str, Any]:
             response = self._client.request(method, path, json=body)
             if response.status_code == 429:
-                retry_after = float(
-                    response.headers.get("Retry-After", "1"),
-                )
+                raw = response.headers.get("Retry-After", "1")
+                try:
+                    retry_after = float(raw)
+                except (ValueError, TypeError):
+                    retry_after = 1.0
                 raise RateLimitError(retry_after, response)
             if response.status_code >= 500:
                 raise ServerError(response.status_code, response.text)
