@@ -44,6 +44,7 @@ class PermissionsMixin:
     _descendant_activity_dirs: list[Path]
     _descendant_state_files: list[Path]
     _descendant_state_dirs: list[Path]
+    _peer_activity_dirs: list[Path]
     _dispatch: dict[str, Any]
     _external: ExternalToolDispatcher
     _session_origin: str
@@ -87,6 +88,8 @@ class PermissionsMixin:
             file_read.append(t("handler.descendant_state"))
         if self._descendant_state_dirs:
             file_read.append(t("handler.descendant_pending"))
+        if self._peer_activity_dirs:
+            file_read.append(t("handler.peer_activity"))
 
         file_header = self._find_section_header(permissions_text, self._FILE_SECTION_HEADERS)
         if file_header:
@@ -182,6 +185,12 @@ class PermissionsMixin:
         if not write:
             for desc_activity in self._descendant_activity_dirs:
                 if resolved.is_relative_to(desc_activity):
+                    return None
+
+        # Peers (same supervisor) can read each other's activity_log
+        if not write:
+            for peer_activity in self._peer_activity_dirs:
+                if resolved.is_relative_to(peer_activity):
                     return None
 
         # Supervisor can read any descendant's state files
@@ -317,6 +326,14 @@ class PermissionsMixin:
                 seg_argv = shlex.split(segment)
             except ValueError:
                 continue
+            if self._is_git_push_command(seg_argv):
+                err = self._check_push_confirmation()
+                if err:
+                    logger.warning(
+                        "permission_denied anima=%s command=%s reason=git_push_requires_human_chat",
+                        self._anima_name, command[:80],
+                    )
+                    return err
             if self._is_pr_create_command(seg_argv):
                 err = self._check_pr_create_confirmation()
                 if err:
@@ -423,6 +440,26 @@ class PermissionsMixin:
             ),
         )
 
+
+    def _check_push_confirmation(self) -> str | None:
+        """Require direct human-chat context for git push."""
+        if self._superuser:
+            return None
+        if self._session_origin == _ORIGIN_HUMAN and active_session_type.get() == "chat":
+            return None
+        return _error_result(
+            "HumanConfirmationRequired",
+            (
+                "Git push requires explicit human confirmation in a direct "
+                "human chat session."
+            ),
+            suggestion=(
+                "Ask the human user in chat for approval, then run git push in that "
+                "same chat session."
+            ),
+        )
+
+
     @staticmethod
     def _is_pr_create_command(seg_argv: list[str]) -> bool:
         """Return True for command forms that create GitHub pull requests."""
@@ -437,4 +474,27 @@ class PermissionsMixin:
                 and seg_argv[1] == "github"
                 and seg_argv[2] == "create-pr"
             )
+        return False
+
+    @staticmethod
+    def _is_git_push_command(seg_argv: list[str]) -> bool:
+        """Return True when argv represents a git push invocation."""
+        if not seg_argv:
+            return False
+        if Path(seg_argv[0]).name != "git":
+            return False
+
+        i = 1
+        while i < len(seg_argv):
+            token = seg_argv[i]
+            if token in (
+                "-C", "-c", "--git-dir", "--work-tree", "--namespace",
+                "--super-prefix", "--config-env",
+            ):
+                i += 2
+                continue
+            if token.startswith("-"):
+                i += 1
+                continue
+            return token == "push"
         return False
