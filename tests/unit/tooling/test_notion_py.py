@@ -5,18 +5,37 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.tools._retry import retry_on_rate_limit as _real_retry_on_rate_limit
 from core.tools.notion import (
     FB_DB_SCHEMA,
+    MAX_PAYLOAD_BYTES,
     NotionClient,
+    RateLimitError,
+    ServerError,
     build_page_url,
     dispatch,
     find_task_page_id,
     get_tool_schemas,
 )
+
+
+def _nosleep_retry_on_rate_limit(fn, *args, **kwargs):
+    """Wrapper that replaces sleep_fn with a no-op for fast tests."""
+    kwargs["sleep_fn"] = lambda _: None
+    return _real_retry_on_rate_limit(fn, *args, **kwargs)
+
+
+def _tracked_sleep_retry(sleep_tracker):
+    """Return a retry wrapper that records sleep durations."""
+    def _wrapper(fn, *args, **kwargs):
+        kwargs["sleep_fn"] = lambda d: sleep_tracker.append(d)
+        return _real_retry_on_rate_limit(fn, *args, **kwargs)
+    return _wrapper
 
 
 # ── build_page_url ────────────────────────────────────────────
@@ -329,3 +348,294 @@ class TestFbDbSchema:
         options = FB_DB_SCHEMA["ステータス"]["select"]["options"]
         option_names = {o["name"] for o in options}
         assert option_names == {"未対応", "対応中", "解消済み"}
+
+
+# ── P1-①: _request error path tests ─────────────────────────
+
+
+def _make_mock_response(status_code, headers=None, text="", json_data=None):
+    """Helper to create a mock httpx.Response."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.headers = headers or {}
+    resp.text = text
+    resp.json.return_value = json_data or {}
+    resp.raise_for_status = MagicMock()
+    if status_code >= 400:
+        import httpx
+        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            f"{status_code}", request=MagicMock(), response=resp,
+        )
+    return resp
+
+
+class TestRequestRetry429:
+    """429 Too Many Requests → RateLimitError + retry with Retry-After."""
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_429_retries_and_succeeds(self, _mock):
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+
+        resp_429 = _make_mock_response(429, headers={"Retry-After": "2"})
+        resp_200 = _make_mock_response(200, json_data={"ok": True})
+        client._client.request.side_effect = [resp_429, resp_200]
+
+        result = NotionClient._request(client, "GET", "/pages/abc")
+
+        assert result == {"ok": True}
+        assert client._client.request.call_count == 2
+
+    def test_429_retry_after_header_applied(self):
+        sleeps = []
+
+        with patch(
+            "core.tools.notion.retry_on_rate_limit",
+            side_effect=_tracked_sleep_retry(sleeps),
+        ):
+            client = MagicMock(spec=NotionClient)
+            client._client = MagicMock()
+
+            resp_429 = _make_mock_response(429, headers={"Retry-After": "5"})
+            resp_200 = _make_mock_response(200, json_data={"ok": True})
+            client._client.request.side_effect = [resp_429, resp_200]
+
+            NotionClient._request(client, "GET", "/pages/abc")
+
+        assert len(sleeps) == 1
+        assert sleeps[0] == 5.0
+
+    def test_429_non_numeric_retry_after_uses_fallback(self):
+        """P2-③: Non-numeric Retry-After header falls back to 1.0."""
+        sleeps = []
+
+        with patch(
+            "core.tools.notion.retry_on_rate_limit",
+            side_effect=_tracked_sleep_retry(sleeps),
+        ):
+            client = MagicMock(spec=NotionClient)
+            client._client = MagicMock()
+
+            resp_429 = _make_mock_response(429, headers={"Retry-After": "not-a-number"})
+            resp_200 = _make_mock_response(200, json_data={"ok": True})
+            client._client.request.side_effect = [resp_429, resp_200]
+
+            result = NotionClient._request(client, "GET", "/pages/abc")
+
+        assert result == {"ok": True}
+        assert len(sleeps) == 1
+        assert sleeps[0] == 1.0
+
+
+class TestRequestRetry5xx:
+    """5xx server errors → ServerError + retry."""
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_500_retries_and_succeeds(self, _mock):
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+
+        resp_500 = _make_mock_response(500, text="Internal Server Error")
+        resp_200 = _make_mock_response(200, json_data={"ok": True})
+        client._client.request.side_effect = [resp_500, resp_200]
+
+        result = NotionClient._request(client, "POST", "/pages", {"data": 1})
+
+        assert result == {"ok": True}
+        assert client._client.request.call_count == 2
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_503_retries_and_succeeds(self, _mock):
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+
+        resp_503 = _make_mock_response(503, text="Service Unavailable")
+        resp_200 = _make_mock_response(200, json_data={"ok": True})
+        client._client.request.side_effect = [resp_503, resp_200]
+
+        result = NotionClient._request(client, "GET", "/pages/abc")
+
+        assert result == {"ok": True}
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_5xx_exhausted_raises_server_error(self, _mock):
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+
+        resp_500 = _make_mock_response(500, text="Server down")
+        client._client.request.return_value = resp_500
+
+        with pytest.raises(ServerError):
+            NotionClient._request(client, "GET", "/pages/abc")
+
+
+class TestRequestRetryConnectError:
+    """httpx.ConnectError → retry."""
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_connect_error_retries_and_succeeds(self, _mock):
+        import httpx
+
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+
+        resp_200 = _make_mock_response(200, json_data={"ok": True})
+        client._client.request.side_effect = [
+            httpx.ConnectError("Connection refused"),
+            resp_200,
+        ]
+
+        result = NotionClient._request(client, "GET", "/pages/abc")
+
+        assert result == {"ok": True}
+        assert client._client.request.call_count == 2
+
+    @patch("core.tools.notion.retry_on_rate_limit", side_effect=_nosleep_retry_on_rate_limit)
+    def test_connect_error_exhausted_raises(self, _mock):
+        import httpx
+
+        client = MagicMock(spec=NotionClient)
+        client._client = MagicMock()
+        client._client.request.side_effect = httpx.ConnectError("Connection refused")
+
+        with pytest.raises(httpx.ConnectError):
+            NotionClient._request(client, "GET", "/pages/abc")
+
+
+# ── P1-②: CRUD method tests ─────────────────────────────────
+
+
+class TestCreatePage:
+    def test_sends_correct_payload(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"id": "new-page-id"})
+        client._validate_payload = MagicMock()
+
+        props = {"Name": {"title": [{"text": {"content": "Test"}}]}}
+        result = NotionClient.create_page(client, "db-123", props)
+
+        client._validate_payload.assert_called_once()
+        client._request.assert_called_once_with(
+            "POST", "/pages",
+            {"parent": {"database_id": "db-123"}, "properties": props},
+        )
+        assert result == {"id": "new-page-id"}
+
+    def test_calls_validate_payload(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"id": "new-page-id"})
+        client._validate_payload = MagicMock()
+
+        NotionClient.create_page(client, "db-123", {"key": "val"})
+
+        payload = client._validate_payload.call_args[0][0]
+        assert "parent" in payload
+        assert "properties" in payload
+
+
+class TestUpdatePage:
+    def test_sends_correct_payload(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"id": "page-abc"})
+
+        props = {"Status": {"select": {"name": "完了"}}}
+        result = NotionClient.update_page(client, "page-abc", props)
+
+        client._request.assert_called_once_with(
+            "PATCH", "/pages/page-abc", {"properties": props},
+        )
+        assert result == {"id": "page-abc"}
+
+
+class TestQueryDatabase:
+    def test_basic_query(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={
+            "results": [{"id": "p1"}],
+            "has_more": False,
+            "next_cursor": None,
+        })
+
+        result = NotionClient.query_database(client, "db-123")
+
+        client._request.assert_called_once_with(
+            "POST", "/databases/db-123/query", {"page_size": 100},
+        )
+        assert len(result["results"]) == 1
+
+    def test_with_filter_and_sorts(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"results": []})
+
+        f = {"property": "Name", "title": {"contains": "TASK"}}
+        s = [{"property": "Name", "direction": "ascending"}]
+        NotionClient.query_database(client, "db-123", filter=f, sorts=s, page_size=10)
+
+        body = client._request.call_args[0][2]
+        assert body["filter"] == f
+        assert body["sorts"] == s
+        assert body["page_size"] == 10
+
+    def test_page_size_clamped_to_100(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"results": []})
+
+        NotionClient.query_database(client, "db-123", page_size=500)
+
+        body = client._request.call_args[0][2]
+        assert body["page_size"] == 100
+
+    def test_page_size_clamped_to_min_1(self):
+        """P2-④: page_size=0 or negative is clamped to 1."""
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"results": []})
+
+        NotionClient.query_database(client, "db-123", page_size=0)
+
+        body = client._request.call_args[0][2]
+        assert body["page_size"] == 1
+
+    def test_page_size_negative_clamped(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"results": []})
+
+        NotionClient.query_database(client, "db-123", page_size=-5)
+
+        body = client._request.call_args[0][2]
+        assert body["page_size"] == 1
+
+    def test_with_start_cursor(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"results": []})
+
+        NotionClient.query_database(client, "db-123", start_cursor="cursor-abc")
+
+        body = client._request.call_args[0][2]
+        assert body["start_cursor"] == "cursor-abc"
+
+
+class TestGetPage:
+    def test_sends_correct_request(self):
+        client = MagicMock(spec=NotionClient)
+        client._request = MagicMock(return_value={"id": "page-xyz", "object": "page"})
+
+        result = NotionClient.get_page(client, "page-xyz")
+
+        client._request.assert_called_once_with("GET", "/pages/page-xyz")
+        assert result["id"] == "page-xyz"
+
+
+class TestValidatePayload:
+    def test_passes_under_limit(self):
+        client = MagicMock(spec=NotionClient)
+        body = {"key": "value"}
+        # Should not raise
+        NotionClient._validate_payload(client, body)
+
+    def test_raises_over_limit(self):
+        client = MagicMock(spec=NotionClient)
+        # Create a payload that exceeds 500KB
+        body = {"data": "x" * (MAX_PAYLOAD_BYTES + 1)}
+
+        with pytest.raises(ValueError, match="exceeds Notion limit"):
+            NotionClient._validate_payload(client, body)
