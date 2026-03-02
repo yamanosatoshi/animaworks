@@ -142,10 +142,12 @@ def _validate_date(value: str) -> bool:
     if not value:
         return False
 
-    # Try ISO 8601 formats
+    # Try ISO 8601 formats (includes GAS Date.toISOString() output: "...T...Z" / "...T....000Z")
     for fmt in (
         "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S.%f%z",
         "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%d",
     ):
         try:
