@@ -19,6 +19,7 @@ site-docs/
 # mkdocs.yml は管理対象
 .env
 tmp/
+repos/
 
 # Coverage
 .coverage
