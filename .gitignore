@@ -18,6 +18,7 @@ site/
 site-docs/
 .env
 tmp/
+repos/
 
 # Coverage
 .coverage
