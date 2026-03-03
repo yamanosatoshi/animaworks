@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from core.i18n import t
@@ -141,6 +142,8 @@ class PrimingEngine:
         self._budget_request: int = _BUDGET_REQUEST
         self._budget_heartbeat: int = _BUDGET_HEARTBEAT
         self._heartbeat_context_pct: float = 0.05
+        # Callback to retrieve active parallel tasks (injected by runner)
+        self._get_active_parallel_tasks: Callable[[], dict[str, dict]] | None = None
 
     # ── Main entry point ────────────────────────────────────────
 
@@ -461,7 +464,16 @@ class PrimingEngine:
         except Exception:
             logger.warning("Failed to read shared channels", exc_info=True)
 
+        _MAX_CHANNEL_ENTRIES = 15
+        if len(result) > _MAX_CHANNEL_ENTRIES:
+            result.sort(key=lambda e: e.ts, reverse=True)
+            result = result[:_MAX_CHANNEL_ENTRIES]
+
         return result
+
+    _OWN_ACTION_TYPES = frozenset({
+        "message_sent", "response_sent", "message_received", "tool_use",
+    })
 
     def _prioritize_entries(
         self,
@@ -472,26 +484,61 @@ class PrimingEngine:
         """Prioritize activity entries for priming.
 
         Priority order:
-        1. Entries involving the current sender (most relevant)
-        2. Entries matching keywords (topically relevant)
-        3. Most recent entries (temporal relevance)
+        1. Own actions (message_sent, response_sent, message_received, tool_use)
+        2. Entries involving the current sender (most relevant)
+        3. Entries matching keywords (topically relevant)
+        4. Most recent entries (temporal relevance, timestamp-based)
         """
+        from datetime import datetime
         from core.memory.activity import ActivityEntry
 
         keywords_lower = {kw.lower() for kw in keywords} if keywords else set()
 
+        # Compute base timestamp for recency scoring
+        base_ts: datetime | None = None
+        if entries:
+            try:
+                base_ts = datetime.fromisoformat(
+                    entries[0].ts.replace("Z", "+00:00")
+                )
+            except (ValueError, AttributeError):
+                pass
+
         scored: list[tuple[float, int, ActivityEntry]] = []
         for i, entry in enumerate(entries):
             score = 0.0
+
+            # Own action bonus
+            if entry.type in self._OWN_ACTION_TYPES:
+                if entry.type == "message_received":
+                    from_type = (entry.meta or {}).get("from_type", "")
+                    if from_type != "anima":
+                        score += 15.0
+                else:
+                    score += 15.0
+
             # Sender relevance
             if entry.from_person == sender_name or entry.to_person == sender_name:
                 score += 10.0
+
             # Keyword relevance
             text = (entry.content + " " + entry.summary).lower()
             matching_kw = sum(1 for kw in keywords_lower if kw in text)
             score += matching_kw * 3.0
-            # Recency (later index = more recent = higher score)
-            score += i * 0.1
+
+            # Recency (timestamp-based: 1 point per 10 minutes)
+            if base_ts is not None:
+                try:
+                    entry_ts = datetime.fromisoformat(
+                        entry.ts.replace("Z", "+00:00")
+                    )
+                    elapsed_seconds = (entry_ts - base_ts).total_seconds()
+                    score += elapsed_seconds / 600
+                except (ValueError, AttributeError):
+                    score += i * 0.1
+            else:
+                score += i * 0.1
+
             scored.append((score, i, entry))
 
         # Sort by score descending
@@ -840,27 +887,86 @@ class PrimingEngine:
             return result
 
         except Exception as e:
-            logger.warning("Channel D: Skill matching failed: %s", e)
-            return []
+            logger.warning(
+                "Channel D: Full skill matching failed, trying Tier 1/2 only: %s", e,
+            )
+            try:
+                matched = match_skills_by_description(
+                    message, all_metas, retriever=None, anima_name="",
+                )
+                result = [m.name for m in matched[:_MAX_SKILL_MATCHES]]
+                if result:
+                    logger.debug(
+                        "Channel D: Tier 1/2 fallback matched %d skills: %s",
+                        len(result), result,
+                    )
+                return result
+            except Exception as e2:
+                logger.warning("Channel D: Tier 1/2 fallback also failed: %s", e2)
+                return []
 
     async def _channel_e_pending_tasks(self) -> str:
-        """Channel E: Pending task queue summary.
+        """Channel E: Pending task queue summary + active parallel tasks.
 
         Retrieves pending tasks from the persistent task queue.
         Human-origin tasks are marked with 🔴 HIGH priority.
+        Also includes currently running parallel tasks (Level 2 format:
+        title + description summary + status + elapsed time).
         Budget: 300 tokens.
 
         Uses asyncio.to_thread to avoid blocking the event loop
         since TaskQueueManager performs synchronous file I/O.
         """
+        parts: list[str] = []
+
+        # Existing: task queue entries
         try:
             from core.memory.task_queue import TaskQueueManager
             manager = TaskQueueManager(self.anima_dir)
-            return await asyncio.to_thread(
+            queue_summary = await asyncio.to_thread(
                 manager.format_for_priming, _BUDGET_PENDING_TASKS,
             )
+            if queue_summary:
+                parts.append(queue_summary)
         except Exception:
             logger.debug("Channel E (pending_tasks) failed", exc_info=True)
+
+        # New: active parallel tasks from _active_parallel_tasks
+        active = self._get_active_parallel_tasks() if self._get_active_parallel_tasks else {}
+        if active:
+            lines = ["## 実行中の並列タスク"]
+            for tid, info in active.items():
+                elapsed = self._format_elapsed(info.get("started_at", ""))
+                status = info.get("status", "running")
+                deps = info.get("depends_on", [])
+                dep_str = f", depends_on: {','.join(deps)}" if deps else ""
+                lines.append(f"- [{tid}] {info.get('title', '?')} ({status} {elapsed}{dep_str})")
+                desc = info.get("description", "")
+                if desc:
+                    lines.append(f"  {desc[:100]}")
+            parts.append("\n".join(lines))
+
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _format_elapsed(started_at: str) -> str:
+        """Format elapsed time from an ISO timestamp."""
+        if not started_at:
+            return ""
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            start = _dt.fromisoformat(started_at)
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=_tz.utc)
+            elapsed_s = (
+                _dt.now(_tz.utc) - start
+            ).total_seconds()
+            if elapsed_s < 60:
+                return f"{int(elapsed_s)}s"
+            if elapsed_s < 3600:
+                return f"{int(elapsed_s / 60)}m"
+            return f"{elapsed_s / 3600:.1f}h"
+        except (ValueError, TypeError):
             return ""
 
     # ── Recent outbound collection ────────────────────────────────
@@ -908,7 +1014,7 @@ class PrimingEngine:
         lines = [t("priming.outbound_header"), ""]
         for e in reversed(recent):
             time_str = e.ts[11:16] if len(e.ts) >= 16 else e.ts
-            text_preview = (e.summary or e.content or "")[:80]
+            text_preview = (e.summary or e.content or "")[:200]
             if e.type == "channel_post":
                 ch = e.channel or "?"
                 lines.append(t("priming.outbound_posted", time_str=time_str, ch=ch, text_preview=text_preview))
