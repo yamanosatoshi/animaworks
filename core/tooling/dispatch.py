@@ -88,7 +88,7 @@ class ExternalToolDispatcher:
                 return self._call_module(mod, name, args)
             except Exception as e:
                 logger.warning("External tool %s failed: %s", name, e)
-                return f"Error executing {name}: {e}"
+                continue
 
         return None
 
@@ -118,7 +118,7 @@ class ExternalToolDispatcher:
                 return self._call_module(mod, name, args)
             except Exception as e:
                 logger.warning("Tool %s (%s) failed: %s", tool_name, name, e)
-                return f"Error executing {name}: {e}"
+                continue
 
         return None
 
