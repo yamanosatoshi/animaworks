@@ -62,7 +62,9 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "gemini-2.5-flash": 1_048_576,
     # Codex CLI models (same context as OpenAI API models)
     "o4-mini": 200_000,
-    "o3": 200_000,  # noqa: F601
+    "o3": 200_000,
+    "spark": 200_000,
+    "gpt-5.3-codex": 200_000,
     # GLM (THUDM)
     "glm-4": 131_072,
     # Qwen 3.5 (GDN hybrid — native 262K but 64K practical for 9B)

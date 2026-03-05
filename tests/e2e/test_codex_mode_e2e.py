@@ -183,6 +183,11 @@ class TestContextWindow:
         size = resolve_context_window("codex/gpt-4.1")
         assert size == 1_000_000
 
+    def test_codex_spark_context_window(self):
+        from core.prompt.context import resolve_context_window
+        size = resolve_context_window("codex/spark")
+        assert size == 200_000
+
 
 # ── No regression tests ──────────────────────────────────────
 
@@ -207,3 +212,4 @@ class TestNoRegression:
         assert len(codex_models) >= 1
         names = [m["name"] for m in codex_models]
         assert "codex/o4-mini" in names
+        assert "codex/spark" in names
