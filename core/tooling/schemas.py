@@ -580,6 +580,9 @@ SUPERVISOR_TOOLS: list[dict[str, Any]] = [
             "  openai/gpt-4.1             最新・コーディング強\n"
             "  openai/gpt-4.1-mini        高速・低コスト\n"
             "  openai/o4-mini-2025-04-16  推論・低コスト\n"
+            "  [Mode C / Codex]\n"
+            "  codex/spark                低遅延・コーディング\n"
+            "  codex/gpt-5.3-codex        高性能コーディング\n"
             "  [Mode A / Google]\n"
             "  google/gemini-2.5-pro      最高性能\n"
             "  google/gemini-2.5-flash    高速バランス\n"
@@ -599,7 +602,7 @@ SUPERVISOR_TOOLS: list[dict[str, Any]] = [
                 },
                 "model": {
                     "type": "string",
-                    "description": "新しいモデル名（例: claude-sonnet-4-6, openai/gpt-4.1）",
+                    "description": "新しいモデル名（例: claude-sonnet-4-6, openai/gpt-4.1, codex/spark）",
                 },
                 "reason": {
                     "type": "string",

@@ -5,6 +5,7 @@
   "anthropic/claude-*":    { "mode": "A", "context_window": 200000 },
   "openai/gpt-4.1*":      { "mode": "A", "context_window": 1000000 },
   "openai/*":              { "mode": "A", "context_window": 128000 },
+  "codex/*":               { "mode": "C", "context_window": 200000 },
   "azure/gpt-4.1*":       { "mode": "A", "context_window": 1000000 },
   "azure/*":               { "mode": "A", "context_window": 128000 },
   "google/*":              { "mode": "A", "context_window": 1000000 },

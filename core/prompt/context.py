@@ -61,6 +61,8 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     # Codex CLI models (same context as OpenAI API models)
     "o4-mini": 200_000,
     "o3": 200_000,
+    "spark": 200_000,
+    "gpt-5.3-codex": 200_000,
     # GLM (THUDM)
     "glm-4": 131_072,
     # Ollama / local (conservative defaults)
