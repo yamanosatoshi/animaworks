@@ -106,9 +106,11 @@ def _migrate_memory_prompts_v1(
     )
 
     # Ensure migrations table exists
-    conn = tool_store._connect()
-    try:
-        conn.execute("CREATE TABLE IF NOT EXISTS migrations (key TEXT PRIMARY KEY, applied_at TEXT)")
+    with tool_store._connect() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS migrations "
+            "(key TEXT PRIMARY KEY, applied_at TEXT)"
+        )
         row = conn.execute(
             "SELECT 1 FROM migrations WHERE key = ?",
             ("memory_prompt_v1",),
@@ -150,8 +152,6 @@ def _migrate_memory_prompts_v1(
         )
         conn.commit()
         logger.info("Applied migration: memory_prompt_v1")
-    finally:
-        conn.close()
 
 
 def _migrate_praise_loop_prevention_v1(
@@ -170,9 +170,11 @@ def _migrate_praise_loop_prevention_v1(
     """
     from core.tooling.prompt_db import SECTION_CONDITIONS
 
-    conn = tool_store._connect()
-    try:
-        conn.execute("CREATE TABLE IF NOT EXISTS migrations (key TEXT PRIMARY KEY, applied_at TEXT)")
+    with tool_store._connect() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS migrations "
+            "(key TEXT PRIMARY KEY, applied_at TEXT)"
+        )
         row = conn.execute(
             "SELECT 1 FROM migrations WHERE key = ?",
             ("praise_loop_prevention_v1",),
@@ -202,8 +204,6 @@ def _migrate_praise_loop_prevention_v1(
         )
         conn.commit()
         logger.info("Applied migration: praise_loop_prevention_v1")
-    finally:
-        conn.close()
 
 
 def _migrate_behavior_rules_must_v1(
@@ -220,9 +220,11 @@ def _migrate_behavior_rules_must_v1(
     """
     from core.tooling.prompt_db import SECTION_CONDITIONS
 
-    conn = tool_store._connect()
-    try:
-        conn.execute("CREATE TABLE IF NOT EXISTS migrations (key TEXT PRIMARY KEY, applied_at TEXT)")
+    with tool_store._connect() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS migrations "
+            "(key TEXT PRIMARY KEY, applied_at TEXT)"
+        )
         row = conn.execute(
             "SELECT 1 FROM migrations WHERE key = ?",
             ("behavior_rules_must_v1",),
@@ -245,8 +247,6 @@ def _migrate_behavior_rules_must_v1(
         )
         conn.commit()
         logger.info("Applied migration: behavior_rules_must_v1")
-    finally:
-        conn.close()
 
 
 def _migrate_resync_sections_v1(
