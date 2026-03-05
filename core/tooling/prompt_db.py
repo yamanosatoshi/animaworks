@@ -18,8 +18,9 @@ Database: ``~/.animaworks/tool_prompts.sqlite3`` (WAL mode).
 
 import logging
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from core.time_utils import now_jst
 
@@ -776,12 +777,25 @@ class ToolPromptStore:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _open_connection(self) -> sqlite3.Connection:
         """Open a new connection with WAL mode and dict row factory."""
         conn = sqlite3.connect(str(self._db_path))
         conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         return conn
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection and always close it to avoid FD leaks."""
+        conn = self._open_connection()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _ensure_schema(self) -> None:
         """Create tables if they don't exist."""

@@ -104,8 +104,7 @@ def _migrate_memory_prompts_v1(
     )
 
     # Ensure migrations table exists
-    conn = tool_store._connect()
-    try:
+    with tool_store._connect() as conn:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS migrations "
             "(key TEXT PRIMARY KEY, applied_at TEXT)"
@@ -151,8 +150,6 @@ def _migrate_memory_prompts_v1(
         )
         conn.commit()
         logger.info("Applied migration: memory_prompt_v1")
-    finally:
-        conn.close()
 
 
 def _migrate_praise_loop_prevention_v1(
@@ -171,8 +168,7 @@ def _migrate_praise_loop_prevention_v1(
     """
     from core.tooling.prompt_db import SECTION_CONDITIONS
 
-    conn = tool_store._connect()
-    try:
+    with tool_store._connect() as conn:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS migrations "
             "(key TEXT PRIMARY KEY, applied_at TEXT)"
@@ -206,8 +202,6 @@ def _migrate_praise_loop_prevention_v1(
         )
         conn.commit()
         logger.info("Applied migration: praise_loop_prevention_v1")
-    finally:
-        conn.close()
 
 
 def _migrate_behavior_rules_must_v1(
@@ -224,8 +218,7 @@ def _migrate_behavior_rules_must_v1(
     """
     from core.tooling.prompt_db import SECTION_CONDITIONS
 
-    conn = tool_store._connect()
-    try:
+    with tool_store._connect() as conn:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS migrations "
             "(key TEXT PRIMARY KEY, applied_at TEXT)"
@@ -252,8 +245,6 @@ def _migrate_behavior_rules_must_v1(
         )
         conn.commit()
         logger.info("Applied migration: behavior_rules_must_v1")
-    finally:
-        conn.close()
 
 
 def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
