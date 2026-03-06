@@ -559,10 +559,42 @@ class CycleMixin:
             len(prompt),
             mode,
         )
+        # Serialize streaming execution per chat thread to avoid concurrent
+        # executor/session access across inbox/chat paths.
+        agent_lock = self._get_agent_lock(thread_id)
+
+        async def _execute_stream_with_optional_lock(
+            system_prompt_arg: str,
+            prompt_arg: str,
+            *,
+            images_arg: list[dict[str, Any]] | None = None,
+            prior_messages_arg: list[dict[str, Any]] | None = None,
+        ) -> AsyncGenerator[dict[str, Any], None]:
+            if mode == "c":
+                async with agent_lock:
+                    async for _chunk in self._executor.execute_streaming(
+                        system_prompt_arg, prompt_arg, tracker,
+                        images=images_arg,
+                        prior_messages=prior_messages_arg,
+                        max_turns_override=max_turns_override,
+                        trigger=trigger,
+                        thread_id=thread_id,
+                    ):
+                        yield _chunk
+            else:
+                async for _chunk in self._executor.execute_streaming(
+                    system_prompt_arg, prompt_arg, tracker,
+                    images=images_arg,
+                    prior_messages=prior_messages_arg,
+                    max_turns_override=max_turns_override,
+                    trigger=trigger,
+                    thread_id=thread_id,
+                ):
+                    yield _chunk
 
         # Non-streaming executors: fall back to blocking execution
         if not self._executor.supports_streaming:
-            async with self._get_agent_lock(thread_id):
+            async with agent_lock:
                 cycle = await self._run_cycle_inner(
                     prompt,
                     trigger,
@@ -659,7 +691,7 @@ class CycleMixin:
         )
         if use_fallback:
             logger.warning("Streaming fallback: using blocking S Fallback for oversized prompt")
-            async with self._get_agent_lock(thread_id):
+            async with agent_lock:
                 cycle = await self._run_cycle_inner(
                     prompt,
                     trigger,
@@ -725,15 +757,11 @@ class CycleMixin:
             stream_succeeded = False
 
             try:
-                async for chunk in self._executor.execute_streaming(
+                async for chunk in _execute_stream_with_optional_lock(
                     current_system_prompt,
                     current_prompt,
-                    tracker,
-                    images=images,
-                    prior_messages=prior_messages,
-                    max_turns_override=max_turns_override,
-                    trigger=trigger,
-                    thread_id=thread_id,
+                    images_arg=images,
+                    prior_messages_arg=prior_messages,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
@@ -949,13 +977,9 @@ class CycleMixin:
             continuation_prompt = load_prompt("session_continuation")
 
             try:
-                async for chunk in self._executor.execute_streaming(
+                async for chunk in _execute_stream_with_optional_lock(
                     system_prompt_2,
                     continuation_prompt,
-                    tracker,
-                    max_turns_override=max_turns_override,
-                    trigger=trigger,
-                    thread_id=thread_id,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
