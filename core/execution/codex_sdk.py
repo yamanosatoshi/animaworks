@@ -117,8 +117,8 @@ def _clear_thread_id(anima_dir: Path, session_type: str, chat_thread_id: str = "
 
 
 def clear_codex_thread_ids(anima_dir: Path, chat_thread_id: str = "default") -> None:
-    """Clear all persisted Codex thread IDs (both chat and heartbeat)."""
-    for st in ("chat", "heartbeat"):
+    """Clear all persisted Codex thread IDs (chat/heartbeat/inbox)."""
+    for st in ("chat", "heartbeat", "inbox"):
         _clear_thread_id(anima_dir, st, chat_thread_id)
 
 
@@ -136,6 +136,8 @@ def _get_thread_id(thread: Any) -> str | None:
 def _resolve_session_type(trigger: str) -> str:
     if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")):
         return "heartbeat"
+    if trigger and trigger.startswith("inbox:"):
+        return "inbox"
     return "chat"
 
 
