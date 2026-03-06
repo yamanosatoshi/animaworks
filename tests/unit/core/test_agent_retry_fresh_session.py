@@ -274,6 +274,53 @@ class TestRetryFreshSession:
             f"(retry_count==1 only), but got {len(chat_clears)} calls"
         )
 
+    @pytest.mark.asyncio
+    async def test_execute_streaming_runs_under_agent_lock_for_codex(self, tmp_path: Path) -> None:
+        """Codex streaming should run while the per-thread agent lock is held."""
+        agent = _make_agent(tmp_path)
+        lock_states: list[bool] = []
+
+        async def _executor_stream(*args, **kwargs):
+            lock_states.append(agent._get_agent_lock("default").locked())
+            yield {
+                "type": "done",
+                "full_text": "ok",
+                "result_message": None,
+                "replied_to_from_transcript": set(),
+                "tool_call_records": [],
+                "force_chain": False,
+            }
+
+        agent._executor.execute_streaming = _executor_stream
+        agent._executor.supports_streaming = True
+
+        with (
+            patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+            patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
+            patch("core.agent.AgentCore._resolve_execution_mode", return_value="c"),
+            patch("core.agent.AgentCore._preflight_size_check") as mock_preflight,
+            patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
+            patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+            patch("core._agent_cycle._save_prompt_log"),
+            patch("core.execution._sdk_session._clear_session_id"),
+            patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
+            patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
+        ):
+            mock_preflight.return_value = ("mocked system prompt", "test prompt", False)
+            mock_retry_cfg.return_value = {
+                "checkpoint_enabled": False,
+                "retry_max": 1,
+                "retry_delay_s": 0.0,
+            }
+            mock_priming.return_value = ""
+
+            events = []
+            async for event in agent.run_cycle_streaming("test prompt", trigger="chat"):
+                events.append(event)
+
+        assert lock_states == [True]
+        assert events[-1]["type"] == "cycle_done"
+
 
 # ── retry exhausted path ──────────────────────────────────────
 

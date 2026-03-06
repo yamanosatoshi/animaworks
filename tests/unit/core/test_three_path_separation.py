@@ -16,6 +16,8 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -487,10 +489,12 @@ class TestProcessInboxMessage:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.reset_posted_channels = MagicMock()
             dp.agent.replied_to = {"peer"}
+            dp.agent.execution_mode = "c"
             dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 assert dp._inbox_lock.locked(), "_inbox_lock should be held during streaming"
+                assert kwargs.get("thread_id") == "_inbox"
                 yield {"type": "cycle_done", "cycle_result": {
                     "trigger": trigger, "action": "responded",
                     "summary": "OK", "duration_ms": 50,
@@ -498,6 +502,45 @@ class TestProcessInboxMessage:
 
             dp.agent.run_cycle_streaming = mock_stream
             await dp.process_inbox_message()
+
+    async def test_contextvar_reset_valueerror_is_suppressed(self, data_dir, make_anima):
+        """ContextVar reset mismatch should not crash inbox processing."""
+        anima_dir = make_anima("inbox_ctx_guard")
+        shared_dir = data_dir / "shared"
+
+        from core.messenger import Messenger
+        m = Messenger(shared_dir, "peer")
+        m.send("inbox_ctx_guard", "Context guard test")
+
+        with patch("core.anima.AgentCore"), \
+             patch("core._anima_messaging.ConversationMemory") as MockConv, \
+             patch("core._anima_inbox.load_prompt", return_value="prompt"):
+            MockConv.return_value.load.return_value = MagicMock(turns=[])
+            from core.anima import DigitalAnima
+            dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent.reset_reply_tracking = MagicMock()
+            dp.agent.reset_posted_channels = MagicMock()
+            dp.agent.replied_to = {"peer"}
+            dp.agent.execution_mode = "c"
+
+            def _token_from_different_context(session_type: str):
+                ctx = contextvars.copy_context()
+                holder: dict[str, object] = {}
+                ctx.run(lambda: holder.setdefault("token", active_session_type.set(session_type)))
+                return holder["token"]
+
+            dp.agent._tool_handler.set_active_session_type = _token_from_different_context
+
+            async def mock_stream(prompt, trigger="manual", **kwargs):
+                yield {"type": "cycle_done", "cycle_result": {
+                    "trigger": trigger, "action": "responded",
+                    "summary": "OK", "duration_ms": 10,
+                }}
+
+            dp.agent.run_cycle_streaming = mock_stream
+            result = await dp.process_inbox_message()
+
+        assert result.action == "responded"
 
 
 # ── PendingTaskExecutor LLM ─────────────────────────────────

@@ -523,10 +523,42 @@ class CycleMixin:
             len(prompt),
             mode,
         )
+        # Serialize streaming execution per chat thread to avoid concurrent
+        # executor/session access across inbox/chat paths.
+        agent_lock = self._get_agent_lock(thread_id)
+
+        async def _execute_stream_with_optional_lock(
+            system_prompt_arg: str,
+            prompt_arg: str,
+            *,
+            images_arg: list[dict[str, Any]] | None = None,
+            prior_messages_arg: list[dict[str, Any]] | None = None,
+        ) -> AsyncGenerator[dict[str, Any], None]:
+            if mode == "c":
+                async with agent_lock:
+                    async for _chunk in self._executor.execute_streaming(
+                        system_prompt_arg, prompt_arg, tracker,
+                        images=images_arg,
+                        prior_messages=prior_messages_arg,
+                        max_turns_override=max_turns_override,
+                        trigger=trigger,
+                        thread_id=thread_id,
+                    ):
+                        yield _chunk
+            else:
+                async for _chunk in self._executor.execute_streaming(
+                    system_prompt_arg, prompt_arg, tracker,
+                    images=images_arg,
+                    prior_messages=prior_messages_arg,
+                    max_turns_override=max_turns_override,
+                    trigger=trigger,
+                    thread_id=thread_id,
+                ):
+                    yield _chunk
 
         # Non-streaming executors: fall back to blocking execution
         if not self._executor.supports_streaming:
-            async with self._get_agent_lock(thread_id):
+            async with agent_lock:
                 cycle = await self._run_cycle_inner(
                     prompt,
                     trigger,
@@ -623,7 +655,7 @@ class CycleMixin:
         )
         if use_fallback:
             logger.warning("Streaming fallback: using blocking S Fallback for oversized prompt")
-            async with self._get_agent_lock(thread_id):
+            async with agent_lock:
                 cycle = await self._run_cycle_inner(
                     prompt,
                     trigger,
@@ -689,15 +721,11 @@ class CycleMixin:
             stream_succeeded = False
 
             try:
-                async for chunk in self._executor.execute_streaming(
+                async for chunk in _execute_stream_with_optional_lock(
                     current_system_prompt,
                     current_prompt,
-                    tracker,
-                    images=images,
-                    prior_messages=prior_messages,
-                    max_turns_override=max_turns_override,
-                    trigger=trigger,
-                    thread_id=thread_id,
+                    images_arg=images,
+                    prior_messages_arg=prior_messages,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
@@ -864,14 +892,18 @@ class CycleMixin:
             tracker.force_threshold()
             logger.info("Context auto-compact (stream): forcing threshold_exceeded")
 
-        if tracker.threshold_exceeded:
-            # Save shortterm for the next message to pick up via inject_shortterm.
-            # Do NOT chain here — chaining mid-response causes the LLM to produce
-            # unnatural "session handoff" messages.
+        while tracker.threshold_exceeded and chain_count < self.model_config.max_chains:
+            session_chained = True
+            chain_count += 1
             logger.info(
-                "Session context at %.1f%% — saving shortterm, will resume on next message (stream)",
+                "Session chain (stream) %d/%d: context at %.1f%%",
+                chain_count,
+                self.model_config.max_chains,
                 tracker.usage_ratio * 100,
             )
+
+            yield {"type": "chain_start", "chain": chain_count}
+
             shortterm.clear()
             shortterm.save(
                 SessionState(
@@ -884,7 +916,10 @@ class CycleMixin:
                     turn_count=result_message.num_turns if result_message else 0,
                 )
             )
-            # Clear SDK session ID so the next session starts fresh
+
+            tracker.reset()
+            # Clear SDK session ID so the chained session starts fresh
+            # (resume would reload the full conversation history, defeating compaction)
             if mode == "s":
                 try:
                     from core.execution._sdk_session import (
@@ -897,9 +932,54 @@ class CycleMixin:
                     if _st in _RESUMABLE_SESSION_TYPES:
                         _clear_session_id(self.anima_dir, _st, thread_id)
                 except Exception:
-                    logger.debug("Failed to clear session ID for deferred chain", exc_info=True)
-        else:
-            shortterm.clear()
+                    logger.debug("Failed to clear session IDs for chain", exc_info=True)
+
+            # Force TIER_LIGHT on chained sessions to reduce system prompt floor
+            _chain_cw = min(_ctx_window_s, 32_000)
+            system_prompt_2 = inject_shortterm(
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                    message=prompt,
+                    retriever=self._get_retriever(),
+                    trigger=trigger,
+                    context_window=_chain_cw,
+                    pending_human_notifications=pending_human_notifications,
+                ).system_prompt,
+                shortterm,
+            )
+            continuation_prompt = load_prompt("session_continuation")
+
+            try:
+                async for chunk in _execute_stream_with_optional_lock(
+                    system_prompt_2,
+                    continuation_prompt,
+                ):
+                    if chunk["type"] == "done":
+                        full_text_parts.append(chunk["full_text"])
+                        result_message = chunk["result_message"]
+                        all_tool_call_records.extend(chunk.get("tool_call_records", []))
+                        _merge_stream_usage(_stream_usage, chunk.get("usage"))
+                        if result_message:
+                            total_turns += result_message.num_turns
+                        # Merge transcript replied_to
+                        transcript_replied = chunk.get("replied_to_from_transcript", set())
+                        if transcript_replied:
+                            self._tool_handler.merge_replied_to(transcript_replied)
+                    else:
+                        yield chunk
+            except Exception:
+                logger.exception(
+                    "Chained session (stream) %d failed",
+                    chain_count,
+                )
+                yield {"type": "error", "message": f"Session chain {chain_count} failed"}
+                break
+
+        shortterm.clear()
 
         _save_prompt_log_end(
             self.anima_dir,
