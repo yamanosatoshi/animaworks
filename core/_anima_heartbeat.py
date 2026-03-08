@@ -61,6 +61,23 @@ def _extract_reflection(text: str) -> str:
     return ""
 
 
+def _is_session_continuation_turn(content: str, continuation_prompt: str) -> bool:
+    """Return True when a turn is the synthetic session-continuation prompt."""
+    text = content.strip()
+    if not text:
+        return False
+
+    prompt = continuation_prompt.strip()
+    if prompt and text == prompt:
+        return True
+
+    first_line = prompt.splitlines()[0].strip() if prompt else ""
+    if first_line and text.startswith(first_line):
+        return True
+
+    return "セッションを引き継ぎます" in text and "短期記憶" in text
+
+
 class HeartbeatMixin:
     """Mixin: heartbeat/cron prompt building, cycle execution, failure handling."""
 
@@ -220,6 +237,17 @@ class HeartbeatMixin:
             conv_mem = ConversationMemory(self.anima_dir, self.model_config)
             state = conv_mem.load()
             recent_turns = state.turns[-5:] if state.turns else []
+            if recent_turns and self.agent.execution_mode == "c":
+                continuation_prompt = load_prompt("session_continuation")
+                recent_turns = [
+                    turn for turn in recent_turns
+                    if not (
+                        turn.role == "human"
+                        and _is_session_continuation_turn(
+                            turn.content, continuation_prompt,
+                        )
+                    )
+                ]
             if recent_turns:
                 conv_lines = []
                 for turn in recent_turns:

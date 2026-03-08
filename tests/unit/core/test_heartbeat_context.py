@@ -591,3 +591,128 @@ class TestHeartbeatDialogueContext:
             assert "Message number 5" in prompt
             assert "Message number 6" in prompt
             assert "Message number 7" in prompt
+
+    async def test_codex_filters_session_continuation_turn(self, data_dir, make_anima):
+        """Codex mode should exclude synthetic session-continuation turns."""
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+
+        def _mock_prompt(name: str, **kwargs) -> str:
+            if name == "session_continuation":
+                return (
+                    "前回のセッションがコンテキスト上限に近づいたため、セッションを引き継ぎます。\n\n"
+                    "システムプロンプト末尾の「短期記憶」セクションを確認してください。"
+                )
+            return "prompt"
+
+        with patch("core.anima.AgentCore"), \
+             patch("core.anima.MemoryManager") as MockMM, \
+             patch("core.anima.Messenger") as MockMsg, \
+             patch("core._anima_heartbeat.load_prompt", side_effect=_mock_prompt), \
+             patch("core._anima_heartbeat.ConversationMemory") as MockConv:
+            MockMM.return_value.read_model_config.return_value = MagicMock()
+            MockMM.return_value.read_heartbeat_config.return_value = "checklist"
+            MockMM.return_value.append_episode = MagicMock()
+            MockMsg.return_value.has_unread.return_value = False
+
+            turn1 = MagicMock()
+            turn1.role = "human"
+            turn1.content = (
+                "前回のセッションがコンテキスト上限に近づいたため、セッションを引き継ぎます。\n"
+                "短期記憶を確認してください。"
+            )
+            turn2 = MagicMock()
+            turn2.role = "human"
+            turn2.content = "本件の進捗を教えて"
+            turn3 = MagicMock()
+            turn3.role = "assistant"
+            turn3.content = "進捗は80%です"
+            mock_state = MagicMock()
+            mock_state.turns = [turn1, turn2, turn3]
+            MockConv.return_value.load.return_value = mock_state
+
+            from core.anima import DigitalAnima
+            dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent.execution_mode = "c"
+            dp.agent.reset_reply_tracking = MagicMock()
+            dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
+
+            captured_prompts: list[str] = []
+
+            async def mock_stream(prompt, trigger="manual", **kwargs):
+                captured_prompts.append(prompt)
+                yield {
+                    "type": "cycle_done",
+                    "cycle_result": {
+                        "trigger": "heartbeat",
+                        "action": "checked",
+                        "summary": "HEARTBEAT_OK",
+                        "duration_ms": 50,
+                    },
+                }
+
+            dp.agent.run_cycle_streaming = mock_stream
+
+            await dp.run_heartbeat()
+
+            assert len(captured_prompts) == 1
+            prompt = captured_prompts[0]
+            assert "本件の進捗を教えて" in prompt
+            assert "セッションを引き継ぎます" not in prompt
+
+    async def test_non_codex_keeps_session_continuation_turn(self, data_dir, make_anima):
+        """Non-Codex modes should keep session-continuation turns unchanged."""
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+
+        def _mock_prompt(name: str, **kwargs) -> str:
+            if name == "session_continuation":
+                return "前回のセッションがコンテキスト上限に近づいたため、セッションを引き継ぎます。"
+            return "prompt"
+
+        with patch("core.anima.AgentCore"), \
+             patch("core.anima.MemoryManager") as MockMM, \
+             patch("core.anima.Messenger") as MockMsg, \
+             patch("core._anima_heartbeat.load_prompt", side_effect=_mock_prompt), \
+             patch("core._anima_heartbeat.ConversationMemory") as MockConv:
+            MockMM.return_value.read_model_config.return_value = MagicMock()
+            MockMM.return_value.read_heartbeat_config.return_value = "checklist"
+            MockMM.return_value.append_episode = MagicMock()
+            MockMsg.return_value.has_unread.return_value = False
+
+            turn1 = MagicMock()
+            turn1.role = "human"
+            turn1.content = "前回のセッションがコンテキスト上限に近づいたため、セッションを引き継ぎます。"
+            mock_state = MagicMock()
+            mock_state.turns = [turn1]
+            MockConv.return_value.load.return_value = mock_state
+
+            from core.anima import DigitalAnima
+            dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent.execution_mode = "s"
+            dp.agent.reset_reply_tracking = MagicMock()
+            dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
+
+            captured_prompts: list[str] = []
+
+            async def mock_stream(prompt, trigger="manual", **kwargs):
+                captured_prompts.append(prompt)
+                yield {
+                    "type": "cycle_done",
+                    "cycle_result": {
+                        "trigger": "heartbeat",
+                        "action": "checked",
+                        "summary": "HEARTBEAT_OK",
+                        "duration_ms": 50,
+                    },
+                }
+
+            dp.agent.run_cycle_streaming = mock_stream
+
+            await dp.run_heartbeat()
+
+            assert len(captured_prompts) == 1
+            prompt = captured_prompts[0]
+            assert "セッションを引き継ぎます" in prompt
