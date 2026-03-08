@@ -12,6 +12,7 @@ build/
 
 # OS
 .DS_Store
+/.*/ 
 
 # Project
 site/
