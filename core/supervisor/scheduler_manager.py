@@ -12,7 +12,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import time
 import zlib
 from collections.abc import Callable
 from datetime import datetime
@@ -54,6 +56,7 @@ class SchedulerManager:
         self._cron_md_mtime: float = 0.0
         self._heartbeat_md_mtime: float = 0.0
         self._last_schedule_level: int | None = None
+        self._heartbeat_slot_dir: Path = self._anima_dir / "state" / "heartbeat_slots"
 
         # Polling-based heartbeat state (used when effective_interval > 60)
         self._hb_effective_interval: int = 0
@@ -139,16 +142,10 @@ class SchedulerManager:
         offset = zlib.crc32(self._anima_name.encode()) % 10
 
         # Determine active hours
-        if active_start is not None and active_end is not None:
-            log_active = f"active {active_start}:00-{active_end}:00"
-        else:
-            log_active = "24h"
+        hour_spec, log_active = self._build_active_hour_spec(active_start, active_end)
 
         if interval <= 60:
             # CronTrigger: build minute spec with offset
-            hour_spec = (
-                f"{active_start}-{active_end - 1}" if active_start is not None and active_end is not None else "*"
-            )
             slots = []
             m = offset
             while m < 60:
@@ -427,6 +424,12 @@ class SchedulerManager:
         if self._heartbeat_running:
             logger.info("Scheduled heartbeat SKIPPED (already running): %s", self._anima_name)
             return
+        if not self._claim_heartbeat_slot():
+            logger.info(
+                "Scheduled heartbeat SKIPPED (duplicate minute slot): %s",
+                self._anima_name,
+            )
+            return
         self._heartbeat_running = True
         try:
             logger.info("Scheduled heartbeat: %s", self._anima_name)
@@ -627,6 +630,74 @@ class SchedulerManager:
             self.reload_schedule(self._anima_name)
             return True
         return False
+
+    @staticmethod
+    def _build_active_hour_spec(
+        active_start: int | None, active_end: int | None,
+    ) -> tuple[str, str]:
+        """Build APScheduler hour spec from heartbeat active-hour range."""
+        if active_start is None or active_end is None:
+            return "*", "24h"
+
+        start = active_start % 24
+        end = active_end % 24
+        if start == end:
+            return "*", "24h"
+        if start < end:
+            return f"{start}-{end - 1}", f"active {start}:00-{end}:00"
+
+        # Overnight range (e.g. 9:00-1:00 => 9-23,0-0)
+        ranges = [f"{start}-23"]
+        if end > 0:
+            ranges.append(f"0-{end - 1}")
+        return ",".join(ranges), f"active {start}:00-{end}:00"
+
+    def _claim_heartbeat_slot(self) -> bool:
+        """Return True only once per minute across processes for this anima."""
+        slot_key = int(time.time() // 60)
+        slot_file = self._heartbeat_slot_dir / f"{slot_key}.lock"
+        try:
+            self._heartbeat_slot_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.debug(
+                "Failed to create heartbeat slot directory: %s",
+                self._heartbeat_slot_dir,
+                exc_info=True,
+            )
+            return True
+
+        try:
+            fd = os.open(slot_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(self._anima_name)
+        except FileExistsError:
+            return False
+        except OSError:
+            logger.debug(
+                "Failed to claim heartbeat slot file: %s",
+                slot_file,
+                exc_info=True,
+            )
+            return True
+
+        # Keep at most one day of slot markers.
+        cutoff = slot_key - 24 * 60
+        try:
+            for old in self._heartbeat_slot_dir.glob("*.lock"):
+                try:
+                    old_slot = int(old.stem)
+                except ValueError:
+                    old.unlink(missing_ok=True)
+                    continue
+                if old_slot < cutoff:
+                    old.unlink(missing_ok=True)
+        except OSError:
+            logger.debug(
+                "Failed to prune old heartbeat slot markers: %s",
+                self._heartbeat_slot_dir,
+                exc_info=True,
+            )
+        return True
 
     # ── Cleanup ──────────────────────────────────────────────────
 

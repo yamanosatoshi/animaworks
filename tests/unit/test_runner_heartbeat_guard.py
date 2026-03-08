@@ -114,6 +114,20 @@ class TestHeartbeatGuard:
         assert mgr.heartbeat_running is False
 
     @pytest.mark.asyncio
+    async def test_heartbeat_tick_skips_duplicate_minute_slot(self, tmp_path):
+        """Second tick in same claimed minute slot should be skipped."""
+        mgr = _make_scheduler_mgr(tmp_path)
+        mock_result = MagicMock()
+        mock_result.model_dump.return_value = {"summary": "ok"}
+        mgr._anima.run_heartbeat = AsyncMock(return_value=mock_result)
+
+        with patch.object(mgr, "_claim_heartbeat_slot", side_effect=[True, False]):
+            await mgr.heartbeat_tick()
+            await mgr.heartbeat_tick()
+
+        mgr._anima.run_heartbeat.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_heartbeat_tick_skips_when_no_anima(self, tmp_path):
         """heartbeat_tick returns early when anima is None."""
         mgr = _make_scheduler_mgr(tmp_path)
@@ -267,3 +281,26 @@ class TestRunnerHeartbeat24hDefault:
         trigger = call_kwargs[1]["trigger"] if "trigger" in (call_kwargs[1] or {}) else call_kwargs[0][1]
         hour_field = str(trigger.fields[5])
         assert "8-19" in hour_field
+
+    def test_heartbeat_md_overnight_range_restricts_hours(self, tmp_path):
+        """Overnight range in heartbeat.md should wrap across midnight."""
+        mock_anima = MagicMock()
+        mock_anima.memory.read_heartbeat_config.return_value = "稼働時間: 9:00 - 1:00"
+
+        mgr = SchedulerManager(
+            anima=mock_anima,
+            anima_name="guard-test",
+            anima_dir=tmp_path / "animas" / "guard-test",
+            emit_event=MagicMock(),
+        )
+        mock_scheduler = MagicMock()
+        mgr.scheduler = mock_scheduler
+
+        mgr._setup_heartbeat()
+
+        mock_scheduler.add_job.assert_called_once()
+        call_kwargs = mock_scheduler.add_job.call_args
+        trigger = call_kwargs[1]["trigger"] if "trigger" in (call_kwargs[1] or {}) else call_kwargs[0][1]
+        hour_field = str(trigger.fields[5])
+        assert "9-23" in hour_field
+        assert "0-0" in hour_field

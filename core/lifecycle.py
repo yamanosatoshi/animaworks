@@ -207,12 +207,7 @@ class LifecycleManager:
 
         # Determine active hours from heartbeat.md
         active_start, active_end = parse_heartbeat_config(hb_content)
-        if active_start is not None and active_end is not None:
-            hour_spec = f"{active_start}-{active_end - 1}"
-            log_active = f"active {active_start}:00-{active_end}:00"
-        else:
-            hour_spec = "*"
-            log_active = "24h"
+        hour_spec, log_active = self._build_active_hour_spec(active_start, active_end)
 
         self.scheduler.add_job(
             self._heartbeat_wrapper,
@@ -233,6 +228,26 @@ class LifecycleManager:
             interval,
             log_active,
         )
+
+    @staticmethod
+    def _build_active_hour_spec(
+        active_start: int | None, active_end: int | None,
+    ) -> tuple[str, str]:
+        """Build APScheduler hour spec from heartbeat active-hour range."""
+        if active_start is None or active_end is None:
+            return "*", "24h"
+
+        start = active_start % 24
+        end = active_end % 24
+        if start == end:
+            return "*", "24h"
+        if start < end:
+            return f"{start}-{end - 1}", f"active {start}:00-{end}:00"
+
+        ranges = [f"{start}-23"]
+        if end > 0:
+            ranges.append(f"0-{end - 1}")
+        return ",".join(ranges), f"active {start}:00-{end}:00"
 
     async def _heartbeat_wrapper(self, name: str) -> None:
         anima = self.animas.get(name)
