@@ -312,7 +312,7 @@ class TestRetryFreshSession:
                 "retry_max": 1,
                 "retry_delay_s": 0.0,
             }
-            mock_priming.return_value = ""
+            mock_priming.return_value = ("", "")
 
             events = []
             async for event in agent.run_cycle_streaming("test prompt", trigger="chat"):

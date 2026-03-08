@@ -27,20 +27,23 @@ except ImportError as exc:
     _WATCHDOG_AVAILABLE = False
     _WATCHDOG_IMPORT_ERROR = exc
 
-    class FileSystemEvent:  # type: ignore[no-redef]
+    class FileSystemEvent:
         """Fallback event object used when watchdog is unavailable."""
 
         def __init__(self, src_path: str, is_directory: bool = False) -> None:
             self.src_path = src_path
             self.is_directory = is_directory
 
-    class FileSystemEventHandler:  # type: ignore[no-redef]
+    class FileSystemEventHandler:
         """Fallback base class."""
+
+        def __init__(self) -> None:
+            pass
 
     class _MissingWatchdogObserver:
         """Sentinel observer used only to detect missing watchdog."""
 
-    Observer = _MissingWatchdogObserver  # type: ignore[assignment,misc]
+    Observer = _MissingWatchdogObserver  # type: ignore[assignment]
 
 logger = logging.getLogger("animaworks.rag.watcher")
 
@@ -138,8 +141,7 @@ class FileWatcher:
         if self._running:
             logger.warning("FileWatcher already running")
             return
-
-        if not _WATCHDOG_AVAILABLE:
+        if not _WATCHDOG_AVAILABLE and getattr(Observer, "__name__", None) == "_MissingWatchdogObserver":
             raise RuntimeError(
                 "watchdog is required for FileWatcher.start(); "
                 "install with 'pip install \"animaworks[rag]\"' or 'pip install watchdog'"

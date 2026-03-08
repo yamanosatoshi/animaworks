@@ -506,6 +506,7 @@ class TestProcessInboxMessage:
     async def test_contextvar_reset_valueerror_is_suppressed(self, data_dir, make_anima):
         """ContextVar reset mismatch should not crash inbox processing."""
         anima_dir = make_anima("inbox_ctx_guard")
+        make_anima("peer")
         shared_dir = data_dir / "shared"
 
         from core.messenger import Messenger
