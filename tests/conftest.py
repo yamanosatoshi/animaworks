@@ -12,8 +12,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import signal
 import subprocess
+import types
 from pathlib import Path
 from typing import Any
 
@@ -33,12 +35,192 @@ load_dotenv()
 
 # ── Optional dependency detection ────────────────────────
 
-# Check if ChromaDB is available
+class _InMemoryChromaCollection:
+    """In-memory Chroma collection used for tests when ChromaDB import fails."""
+
+    def __init__(self, name: str, metadata: dict[str, object] | None = None) -> None:
+        self.name = name
+        self.metadata = metadata or {}
+        self._records: dict[str, tuple[str, list[float], dict[str, object]]] = {}
+
+    @staticmethod
+    def _dot(a: list[float], b: list[float]) -> float:
+        return sum(x * y for x, y in zip(a, b))
+
+    @staticmethod
+    def _norm(v: list[float]) -> float:
+        return sum(x * x for x in v) ** 0.5
+
+    def upsert(self, ids: list[str], documents: list[str], embeddings: list[list[float]], metadatas: list[dict[str, object]]) -> None:
+        for doc_id, doc, embedding, metadata in zip(ids, documents, embeddings, metadatas):
+            self._records[str(doc_id)] = (
+                str(doc),
+                list(embedding),
+                dict(metadata),
+            )
+
+    def query(
+        self,
+        query_embeddings: list[list[float]],
+        n_results: int,
+        where: dict[str, object] | None = None,
+    ) -> dict[str, list[list[object]]]:
+        if not query_embeddings or not self._records:
+            return {
+                "ids": [[]],
+                "documents": [[]],
+                "metadatas": [[]],
+                "distances": [[]],
+            }
+
+        q = query_embeddings[0]
+        q_norm = self._norm(q)
+        scored: list[tuple[str, str, dict[str, object], float]] = []
+
+        for doc_id, (doc, embedding, metadata) in self._records.items():
+            if where:
+                missing = False
+                for key, value in where.items():
+                    if metadata.get(key) != value:
+                        missing = True
+                        break
+                if missing:
+                    continue
+            score = 0.0
+            if q_norm > 0.0:
+                denominator = q_norm * self._norm(embedding)
+                if denominator > 0.0:
+                    score = self._dot(q, embedding) / denominator
+            scored.append((doc_id, doc, metadata, 1.0 - score))
+
+        scored.sort(key=lambda item: item[3], reverse=False)
+        top = scored[:n_results]
+
+        ids = [item[0] for item in top]
+        documents = [item[1] for item in top]
+        metadatas = [item[2] for item in top]
+        distances = [item[3] for item in top]
+
+        return {
+            "ids": [ids],
+            "documents": [documents],
+            "metadatas": [metadatas],
+            "distances": [distances],
+        }
+
+    def delete(self, ids: list[str]) -> None:
+        for doc_id in ids:
+            self._records.pop(str(doc_id), None)
+
+    def update(self, ids: list[str], metadatas: list[dict[str, object]]) -> None:
+        for doc_id, metadata in zip(ids, metadatas):
+            key = str(doc_id)
+            if key in self._records:
+                doc, embedding, _ = self._records[key]
+                merged = dict(_)
+                merged.update(metadata)
+                self._records[key] = (doc, embedding, merged)
+
+
+class _InMemoryChromaClient:
+    """Minimal subset of PersistentClient semantics used by production code/tests."""
+
+    _STATE: dict[str, dict[str, _InMemoryChromaCollection]] = {}
+
+    def __init__(self, path: str | None = None) -> None:
+        # EphemeralClient() is often called without arguments.
+        if path is None:
+            path = f":memory:{id(self)}"
+        self.path = path
+        self._store = self._STATE.setdefault(path, {})
+
+    def create_collection(self, name: str, metadata: dict[str, object] | None = None) -> _InMemoryChromaCollection:
+        collection = self._store.get(name)
+        if collection is None:
+            collection = _InMemoryChromaCollection(name=name, metadata=metadata)
+            self._store[name] = collection
+        return collection
+
+    def get_or_create_collection(self, name: str, metadata: dict[str, object] | None = None) -> _InMemoryChromaCollection:
+        return self.create_collection(name=name, metadata=metadata)
+
+    def get_collection(self, name: str) -> _InMemoryChromaCollection:
+        if name not in self._store:
+            raise RuntimeError(f"Collection '{name}' does not exist")
+        return self._store[name]
+
+    def list_collections(self) -> list[_InMemoryChromaCollection]:
+        return list(self._store.values())
+
+    def delete_collection(self, name: str) -> None:
+        self._store.pop(name, None)
+
+
+def _build_fake_chromadb() -> None:
+    """Install a tiny in-memory chromadb-compatible module into sys.modules."""
+    module = types.ModuleType("chromadb")
+
+    class CollectionInfo(types.SimpleNamespace):
+        pass
+
+    def _collection_info(name: str, metadata: dict[str, object] | None = None) -> CollectionInfo:
+        return CollectionInfo(name=name, metadata=metadata or {})
+
+    # Keep Chroma method shape for compatibility with existing test expectations.
+    def list_collections_wrapper(self: _InMemoryChromaClient):
+        return [_collection_info(name=coll.name, metadata=coll.metadata) for coll in self._store.values()]
+
+    module.PersistentClient = _InMemoryChromaClient
+
+    def _ephemeral_client() -> _InMemoryChromaClient:
+        return _InMemoryChromaClient(path=None)
+
+    module.EphemeralClient = _ephemeral_client
+    module._InMemoryChromaClient = _InMemoryChromaClient
+
+    def _patched_list_collections(self: _InMemoryChromaClient):  # type: ignore[override]
+        return list_collections_wrapper(self)
+
+    _InMemoryChromaClient.list_collections = _patched_list_collections  # type: ignore[method-assign]
+
+    sys.modules["chromadb"] = module
+
+
+def _iter_exception_chain(exc: Exception):
+    seen: set[int] = set()
+    current: Exception | None = exc
+    while current is not None and id(current) not in seen:
+        yield current
+        seen.add(id(current))
+        next_exc = current.__cause__ or current.__context__
+        current = next_exc if isinstance(next_exc, Exception) else None
+
+
+def _is_known_chromadb_optional_failure(exc: Exception) -> bool:
+    """Return True only for known optional-dependency/import failures.
+
+    We intentionally avoid swallowing unrelated runtime bugs during import.
+    """
+    for err in _iter_exception_chain(exc):
+        if isinstance(err, ImportError):
+            return True
+        mod = err.__class__.__module__
+        msg = str(err)
+        if mod.startswith("pydantic") and "chroma_server_nofile" in msg:
+            return True
+    return False
+
+
 try:
-    import chromadb
+    import chromadb  # noqa: F401
     CHROMADB_AVAILABLE = True
-except ImportError:
-    CHROMADB_AVAILABLE = False
+except Exception as exc:
+    if _is_known_chromadb_optional_failure(exc):
+        CHROMADB_AVAILABLE = False
+        _build_fake_chromadb()
+        logger.warning("Using in-memory fake chromadb due to import failure: %s", exc)
+    else:
+        raise
 
 
 # ── CLI options ───────────────────────────────────────────
