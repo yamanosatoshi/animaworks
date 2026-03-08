@@ -47,6 +47,15 @@ logger = logging.getLogger("animaworks.execution.codex_sdk")
 __all__ = ["CodexSDKExecutor", "clear_codex_thread_ids", "is_codex_sdk_available"]
 
 RESUME_TIMEOUT_SEC = 15.0
+_MESSAGE_ITEM_TYPES = {"message", "agent_message"}
+_THINKING_ITEM_TYPES = {"reasoning"}
+_TOOL_ITEM_TYPES = {
+    "tool_use",
+    "mcp_tool_call",
+    "command_execution",
+    "file_change",
+    "web_search",
+}
 
 # asyncio.StreamReader default limit is 64 KB.  Codex CLI may echo the full
 # context (including system prompt) in a single JSONL line during thread
@@ -693,6 +702,7 @@ class CodexSDKExecutor(BaseExecutor):
             thread = self._start_or_resume_thread(codex, tid, session_type)
             active_thread = thread
             streamed = await thread.run_streamed(prompt)
+            in_reasoning_block = False
 
             async for event in streamed.events:
                 if self._check_interrupted():
@@ -703,7 +713,22 @@ class CodexSDKExecutor(BaseExecutor):
                 if etype == "item.completed":
                     item = event.item
                     item_type = getattr(item, "type", "")
-                    if item_type == "message":
+                    if item_type in _THINKING_ITEM_TYPES:
+                        text = _extract_item_text(item)
+                        if text:
+                            if not in_reasoning_block:
+                                in_reasoning_block = True
+                                yield {"type": "thinking_start"}
+                            yield {"type": "thinking_delta", "text": text}
+                        else:
+                            logger.debug(
+                                "Codex item.completed reasoning with empty text: %s",
+                                repr(item)[:300],
+                            )
+                    elif item_type in _MESSAGE_ITEM_TYPES:
+                        if in_reasoning_block:
+                            in_reasoning_block = False
+                            yield {"type": "thinking_end"}
                         text = _extract_item_text(item)
                         if text:
                             response_text_parts.append(text)
@@ -713,15 +738,18 @@ class CodexSDKExecutor(BaseExecutor):
                                 "Codex item.completed message with empty text: %s",
                                 repr(item)[:300],
                             )
-                    elif item_type == "tool_use":
-                        tool_name = getattr(item, "name", "unknown")
+                    elif item_type in _TOOL_ITEM_TYPES:
+                        if in_reasoning_block:
+                            in_reasoning_block = False
+                            yield {"type": "thinking_end"}
+                        rec = _item_to_tool_record(item)
+                        tool_name = rec.tool_name if rec else item_type
                         tool_id = getattr(item, "id", "")
                         yield {
                             "type": "tool_start",
                             "tool_name": tool_name,
                             "tool_id": tool_id,
                         }
-                        rec = _item_to_tool_record(item)
                         if rec:
                             all_tool_records.append(rec)
                         yield {
@@ -730,6 +758,9 @@ class CodexSDKExecutor(BaseExecutor):
                             "tool_name": tool_name,
                         }
                     else:
+                        if in_reasoning_block:
+                            in_reasoning_block = False
+                            yield {"type": "thinking_end"}
                         text = _extract_item_text(item)
                         if text:
                             logger.info(
@@ -764,11 +795,17 @@ class CodexSDKExecutor(BaseExecutor):
                     if saved_tid:
                         _save_thread_id(self._anima_dir, saved_tid, session_type)
                 elif etype == "text.delta":
+                    if in_reasoning_block:
+                        in_reasoning_block = False
+                        yield {"type": "thinking_end"}
                     text = getattr(event, "text", "") or getattr(event, "delta", "")
                     if text:
                         response_text_parts.append(text)
                         yield {"type": "text_delta", "text": text}
                 elif etype == "response.completed":
+                    if in_reasoning_block:
+                        in_reasoning_block = False
+                        yield {"type": "thinking_end"}
                     resp = getattr(event, "response", event)
                     text = _extract_item_text(resp)
                     if text and text not in response_text_parts:
@@ -780,6 +817,8 @@ class CodexSDKExecutor(BaseExecutor):
                         etype,
                         [a for a in dir(event) if not a.startswith("_")][:15],
                     )
+            if in_reasoning_block:
+                yield {"type": "thinking_end"}
 
         # Try resume first, fallback to fresh thread
         fell_back = False

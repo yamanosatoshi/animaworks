@@ -461,6 +461,52 @@ class TestStreamingExecution:
         assert tool_start["tool_name"] == "web_search"
 
     @pytest.mark.asyncio
+    async def test_stream_reasoning_item_emits_thinking_events(self, executor):
+        reasoning_item = MagicMock()
+        reasoning_item.type = "reasoning"
+        reasoning_item.text = "Planning next steps"
+
+        reasoning_event = MagicMock()
+        reasoning_event.type = "item.completed"
+        reasoning_event.item = reasoning_item
+
+        done_event = MagicMock()
+        done_event.type = "turn.completed"
+        done_event.usage = None
+
+        async def fake_events():
+            yield reasoning_event
+            yield done_event
+
+        mock_streamed = MagicMock()
+        mock_streamed.events = fake_events()
+
+        mock_thread = MagicMock()
+        mock_thread.run_streamed = AsyncMock(return_value=mock_streamed)
+        mock_thread.id = "reasoning-thread"
+
+        mock_codex = MagicMock()
+        mock_codex.start_thread.return_value = mock_thread
+
+        events = []
+        with patch.object(executor, "_create_codex_client", return_value=mock_codex):
+            tracker = ContextTracker(model="codex/o4-mini")
+            async for ev in executor.execute_streaming(
+                system_prompt="test",
+                prompt="Hello",
+                tracker=tracker,
+            ):
+                events.append(ev)
+
+        types = [e["type"] for e in events]
+        assert "thinking_start" in types
+        assert "thinking_delta" in types
+        assert "thinking_end" in types
+        assert "text_delta" not in types
+        done_ev = next(e for e in events if e["type"] == "done")
+        assert done_ev["full_text"] == ""
+
+    @pytest.mark.asyncio
     async def test_stream_interrupted_mid_stream(self, model_config, anima_dir):
         interrupt = asyncio.Event()
 
