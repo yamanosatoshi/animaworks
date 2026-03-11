@@ -61,6 +61,7 @@ function registerRoutes() {
   routes["/assets"] = () => import("../pages/assets.js" + _v);
   routes["/tool-prompts"] = () => import("../pages/tool-prompts.js" + _v);
   routes["/settings"] = () => import("../pages/settings.js" + _v);
+  routes["/self-ai"] = () => import("../pages/self-ai.js" + _v);
 }
 
 // ── Route Handler ───────────────────────────

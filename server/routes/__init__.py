@@ -18,6 +18,7 @@ from server.routes.memory_routes import create_memory_router
 from server.routes.sessions import create_sessions_router
 from server.routes.system import create_system_router
 from server.routes.tool_prompts import create_tool_prompts_router
+from server.routes.self_ai import create_self_ai_router
 from server.routes.users import create_users_router
 from server.routes.voice import create_voice_router
 from server.routes.webhooks import create_webhooks_router
@@ -41,6 +42,7 @@ def create_router() -> APIRouter:
     api.include_router(create_internal_router())
     api.include_router(create_auth_router())
     api.include_router(create_tool_prompts_router())
+    api.include_router(create_self_ai_router())
     api.include_router(create_users_router())
     api.include_router(create_webhooks_router())
 
