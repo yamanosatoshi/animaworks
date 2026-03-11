@@ -86,9 +86,7 @@ def raise_nofile_soft_limit(*, min_soft: int | None = None) -> tuple[int | None,
     except Exception as exc:
         logger.warning(
             "Failed to raise RLIMIT_NOFILE soft limit from %s to %s: %s",
-            old_soft,
-            desired_soft,
-            exc,
+            old_soft, desired_soft, exc,
         )
         return (old_soft, old_soft, hard)
 

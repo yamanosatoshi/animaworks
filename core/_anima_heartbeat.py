@@ -61,6 +61,23 @@ def _extract_reflection(text: str) -> str:
     return ""
 
 
+def _is_session_continuation_turn(content: str, continuation_prompt: str) -> bool:
+    """Return True when a turn is the synthetic session-continuation prompt."""
+    text = content.strip()
+    if not text:
+        return False
+
+    prompt = continuation_prompt.strip()
+    if prompt and text == prompt:
+        return True
+
+    first_line = prompt.splitlines()[0].strip() if prompt else ""
+    if first_line and text.startswith(first_line):
+        return True
+
+    return "セッションを引き継ぎます" in text and "短期記憶" in text
+
+
 class HeartbeatMixin:
     """Mixin: heartbeat/cron prompt building, cycle execution, failure handling."""
 
@@ -175,16 +192,11 @@ class HeartbeatMixin:
         conv = ConversationMemory(self.anima_dir, self.model_config)
         return conv.build_structured_messages(prompt_text)
 
-    def _build_background_context_parts(self, include_dialogue: bool = True) -> list[str]:
+    def _build_background_context_parts(self) -> list[str]:
         """Build shared context parts for background-auto sessions (heartbeat/cron).
 
         Collects: recovery note, background task notifications, heartbeat
         history, reflections, dialogue context, subordinate check.
-
-        Args:
-            include_dialogue: If True, inject recent chat dialogue turns.
-                Set to False for cron tasks to prevent chat context leaking
-                into scheduled task execution.
         """
         parts: list[str] = []
 
@@ -221,29 +233,38 @@ class HeartbeatMixin:
             parts.append(load_prompt("fragments/recent_reflections") + "\n\n" + reflection_text)
 
         # Inject recent dialogue context for cross-session continuity
-        # Skipped for cron tasks to prevent chat context leaking into scheduled execution
-        if include_dialogue:
-            try:
-                conv_mem = ConversationMemory(self.anima_dir, self.model_config)
-                state = conv_mem.load()
-                recent_turns = state.turns[-5:] if state.turns else []
-                if recent_turns:
-                    conv_lines = []
-                    for turn in recent_turns:
-                        snippet = turn.content[:200]
-                        conv_lines.append(f"- [{turn.role}] {snippet}")
-                    conv_summary = "\n".join(conv_lines)
-                    parts.append(
-                        t("agent.recent_dialogue_header")
-                        + "\n\n"
-                        + t("agent.recent_dialogue_intro")
-                        + "\n"
-                        + t("agent.recent_dialogue_consider")
-                        + "\n\n"
-                        + conv_summary
+        try:
+            conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+            state = conv_mem.load()
+            recent_turns = state.turns[-5:] if state.turns else []
+            if recent_turns and self.agent.execution_mode == "c":
+                continuation_prompt = load_prompt("session_continuation")
+                recent_turns = [
+                    turn for turn in recent_turns
+                    if not (
+                        turn.role == "human"
+                        and _is_session_continuation_turn(
+                            turn.content, continuation_prompt,
+                        )
                     )
-            except Exception:
-                logger.debug("[%s] Failed to load dialogue context", self.name, exc_info=True)
+                ]
+            if recent_turns:
+                conv_lines = []
+                for turn in recent_turns:
+                    snippet = turn.content[:200]
+                    conv_lines.append(f"- [{turn.role}] {snippet}")
+                conv_summary = "\n".join(conv_lines)
+                parts.append(
+                    t("agent.recent_dialogue_header")
+                    + "\n\n"
+                    + t("agent.recent_dialogue_intro")
+                    + "\n"
+                    + t("agent.recent_dialogue_consider")
+                    + "\n\n"
+                    + conv_summary
+                )
+        except Exception:
+            logger.debug("[%s] Failed to load dialogue context", self.name, exc_info=True)
 
         # ── Subordinate management check for animas with subordinates ──
         try:
@@ -311,8 +332,8 @@ class HeartbeatMixin:
         if command_output:
             parts.append(load_prompt("fragments/command_output", output=command_output))
 
-        # Shared background context (without dialogue — cron tasks must not inherit chat context)
-        parts.extend(self._build_background_context_parts(include_dialogue=False))
+        # Shared background context (same as heartbeat)
+        parts.extend(self._build_background_context_parts())
 
         return "\n\n".join(parts)
 

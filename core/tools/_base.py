@@ -126,8 +126,16 @@ def _lookup_vault_credential(key: str) -> str | None:
 def _lookup_shared_credentials(key: str) -> str | None:
     """Look up a key in the shared credentials file.
 
-    Reads ``{data_dir}/shared/credentials.json`` (a flat key-value JSON)
-    and returns the value for *key*, or ``None`` if not found.
+    Reads ``{data_dir}/shared/credentials.json`` and returns the value for
+    *key*.  Supports both flat structures (``{"KEY": "value"}``) and nested
+    structures (``{"service": {"token_field": "value"}}``).
+
+    For nested structures:
+    - If *key* exactly matches a top-level entry whose value is a dict,
+      extracts the most likely credential string from that dict.
+    - If *key* looks like an env-var (e.g. ``NOTION_TOKEN``), strips
+      common suffixes (``_TOKEN``, ``_KEY``, etc.) and retries as a
+      service name lookup.
     """
     from core.paths import get_data_dir
 
@@ -139,8 +147,46 @@ def _lookup_shared_credentials(key: str) -> str | None:
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to read %s: %s", cred_file, exc)
         return None
+
+    # 1. Flat lookup (original behaviour – backwards compatible)
     val = data.get(key)
-    return val if val else None
+    if isinstance(val, str) and val:
+        return val
+
+    # 2. Direct nested lookup: key matches a top-level dict entry
+    if isinstance(val, dict):
+        return _extract_credential_from_dict(val)
+
+    # 3. Suffix-normalised lookup
+    #    e.g., "NOTION_TOKEN" → strip "_TOKEN" → try "notion"
+    _SUFFIXES = ("_TOKEN", "_KEY", "_API_KEY", "_SECRET")
+    for suffix in _SUFFIXES:
+        if key.upper().endswith(suffix):
+            base = key[: len(key) - len(suffix)].lower()
+            nested_val = data.get(base)
+            if isinstance(nested_val, dict):
+                return _extract_credential_from_dict(nested_val)
+            break  # only strip one suffix
+
+    return None
+
+
+def _extract_credential_from_dict(d: dict[str, Any]) -> str | None:
+    """Extract the most likely credential string from a nested dict.
+
+    Scans keys in priority order: ``token`` > ``secret`` > ``password``
+    > ``key``.  Falls back to the first non-empty string value.
+    """
+    _PRIORITY = ("token", "secret", "password", "key")
+    for hint in _PRIORITY:
+        for k, v in d.items():
+            if isinstance(v, str) and v and hint in k.lower():
+                return v
+    # Fallback: first non-empty string value
+    for v in d.values():
+        if isinstance(v, str) and v:
+            return v
+    return None
 
 
 def _log_resolved(

@@ -161,6 +161,8 @@ class InboxMixin:
 
                     accumulated_text = ""
                     result: CycleResult | None = None
+                    _is_codex_mode = self.agent.execution_mode == "c"
+                    _stream_thread_id = "_inbox" if _is_codex_mode else "default"
 
                     original_config = None
                     bg_config = self._resolve_background_config()
@@ -170,8 +172,7 @@ class InboxMixin:
 
                     try:
                         async for chunk in self.agent.run_cycle_streaming(
-                            prompt,
-                            trigger=trigger,
+                            prompt, trigger=trigger, thread_id=_stream_thread_id,
                         ):
                             if chunk.get("type") == "text_delta":
                                 accumulated_text += chunk.get("text", "")
@@ -201,8 +202,26 @@ class InboxMixin:
                             self.agent.update_model_config(original_config)
                         journal.close()
                         if _fanout_token is not None:
-                            suppress_board_fanout.reset(_fanout_token)
-                        active_session_type.reset(_session_token)
+                            try:
+                                suppress_board_fanout.reset(_fanout_token)
+                            except ValueError:
+                                if _is_codex_mode:
+                                    logger.warning(
+                                        "[%s] suppress_board_fanout reset skipped (context mismatch)",
+                                        self.name,
+                                    )
+                                else:
+                                    raise
+                        try:
+                            active_session_type.reset(_session_token)
+                        except ValueError:
+                            if _is_codex_mode:
+                                logger.warning(
+                                    "[%s] active_session_type reset skipped (context mismatch)",
+                                    self.name,
+                                )
+                            else:
+                                raise
 
                     self._last_activity = now_local()
 
