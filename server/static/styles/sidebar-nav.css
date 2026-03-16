@@ -141,3 +141,111 @@
     pointer-events: none;
   }
 }
+
+/* ── "More" Toggle ───────────────────────── */
+
+.nav-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  color: var(--aw-color-sidebar-muted);
+  font-size: 0.84rem;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.nav-more-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--aw-color-sidebar-hover-bg);
+}
+
+.nav-more-toggle.open {
+  color: var(--aw-color-sidebar-hover-bg);
+}
+
+/* ── Settings Area (bottom) ──────────────── */
+
+.sidebar-settings-area {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+}
+
+.sidebar-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--aw-color-sidebar-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-size: 1.2rem;
+}
+
+.sidebar-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--aw-color-sidebar-text);
+}
+
+/* ── Settings Popup ──────────────────────── */
+
+.sidebar-settings-popup {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 10px;
+  width: 200px;
+  background: var(--aw-color-bg-primary);
+  border: 1px solid var(--aw-color-border-medium);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  z-index: 9999;
+}
+
+.sidebar-settings-popup.open {
+  display: block;
+}
+
+.sidebar-settings-popup-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--aw-color-text-primary);
+  font-size: 0.88rem;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+  font-family: inherit;
+}
+
+.sidebar-settings-popup-item:hover {
+  background: var(--aw-color-bg-hover);
+}
+
+.sidebar-settings-popup-item i {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--aw-color-text-muted);
+}
+
+.sidebar-settings-popup-divider {
+  height: 1px;
+  background: var(--aw-color-border-light);
+  margin: 4px 8px;
+}

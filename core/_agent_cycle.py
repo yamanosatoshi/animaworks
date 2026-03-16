@@ -694,6 +694,8 @@ class CycleMixin:
         )
 
         # ── Stream retry configuration ────────────────────
+        from core.paths import load_prompt
+
         retry_cfg = self._load_stream_retry_config()
         checkpoint_enabled = retry_cfg["checkpoint_enabled"]
         max_retries = retry_cfg["retry_max"]

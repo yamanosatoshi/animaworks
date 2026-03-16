@@ -95,6 +95,8 @@
               <span class="ws-conv-anima-name" id="wsConvAnimaName"></span>
               <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" data-i18n-aria-label="common.aria_character">&#128100;</button>
             </div>
+            <!-- Avatar Row: Team Members -->
+            <div class="ws-avatar-row" id="wsAvatarRow"></div>
             <div class="thread-tabs ws-thread-tabs" id="wsThreadTabs"></div>
             <div class="ws-conv-messages" id="wsConvMessages">
               <div class="chat-empty" data-i18n="ws.messages_empty">No messages yet</div>
@@ -128,6 +130,60 @@
               <input type="file" id="wsConvFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
             </div>
           </main>
+
+          <!-- Right: Info Panel -->
+          <aside class="ws-right-panel" id="wsRightPanel">
+            <!-- Suggestions Card -->
+            <div class="ws-rp-section ws-rp-suggestions">
+              <div class="ws-rp-section-title">
+                <span class="ws-rp-icon">💡</span> Suggestions
+              </div>
+              <div class="ws-rp-suggestions-list" id="wsRpSuggestions">
+                <div class="ws-rp-card">
+                  <div class="ws-rp-card-title">Check today's progress</div>
+                  <div class="ws-rp-card-desc">Ask about task completion status</div>
+                </div>
+                <div class="ws-rp-card">
+                  <div class="ws-rp-card-title">Review pending items</div>
+                  <div class="ws-rp-card-desc">See tasks awaiting your approval</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="ws-rp-section ws-rp-actions">
+              <div class="ws-rp-section-title">
+                <span class="ws-rp-icon">⚡</span> Quick Actions
+              </div>
+              <div class="ws-rp-actions-grid" id="wsRpActions">
+                <button class="ws-rp-action-btn" data-action="status">📊 Status</button>
+                <button class="ws-rp-action-btn" data-action="tasks">📋 Tasks</button>
+                <button class="ws-rp-action-btn" data-action="report">📝 Report</button>
+                <button class="ws-rp-action-btn" data-action="schedule">📅 Schedule</button>
+              </div>
+            </div>
+
+            <!-- Today's Team Summary -->
+            <div class="ws-rp-section ws-rp-summary">
+              <div class="ws-rp-section-title">
+                <span class="ws-rp-icon">📋</span> TODAY'S TEAM SUMMARY
+              </div>
+              <div class="ws-rp-summary-content" id="wsRpSummary">
+                <div class="ws-rp-summary-item">
+                  <span class="ws-rp-summary-label">Active Members</span>
+                  <span class="ws-rp-summary-value" id="wsRpActiveCount">—</span>
+                </div>
+                <div class="ws-rp-summary-item">
+                  <span class="ws-rp-summary-label">Messages Today</span>
+                  <span class="ws-rp-summary-value" id="wsRpMessageCount">—</span>
+                </div>
+                <div class="ws-rp-summary-item">
+                  <span class="ws-rp-summary-label">Tasks Completed</span>
+                  <span class="ws-rp-summary-value" id="wsRpTaskCount">—</span>
+                </div>
+              </div>
+            </div>
+          </aside>
 
           <!-- Right: Live2D Character -->
           <aside class="ws-conv-character">

@@ -15,6 +15,7 @@ import { initActivity } from "./activity.js";
 import { initSidebar, activateRightTab } from "./sidebar.js";
 import { initBoard, initBoardTab } from "./board.js";
 import { initChatController, openConversation, closeConversation } from "./chat-controller.js";
+import { initChatPanels, refreshChatPanels } from "./chat-panels.js";
 
 import { setupWebSocket } from "./app-websocket.js";
 import { initOfficeIfNeeded, loadSystemStatus, updateStatusDisplay } from "./app-system.js";
@@ -66,6 +67,10 @@ function cacheDom() {
   dom.convPendingLabel = document.getElementById("wsConvPendingLabel");
   dom.convPendingCancel = document.getElementById("wsConvPendingCancel");
   dom.convQueueBtn = document.getElementById("wsConvQueueBtn");
+
+  // Avatar row & right panel
+  dom.avatarRow = document.getElementById("wsAvatarRow");
+  dom.rightPanel = document.getElementById("wsRightPanel");
 
   // Mobile controls
   dom.mobileSidebarToggle = document.getElementById("wsMobileSidebarToggle");
@@ -180,6 +185,7 @@ async function startDashboard() {
   }, { onBoardInit: initBoardTab });
 
   initChatController(dom);
+  initChatPanels();
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -232,6 +238,7 @@ async function onAnimaSelected(name) {
     loadMemoryTab(getState().activeMemoryTab),
     loadSessions(),
   ]);
+  refreshChatPanels();
 }
 
 // ── Main Init ──────────────────────
