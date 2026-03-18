@@ -1,98 +1,36 @@
 import React from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "ログイン | KON",
-  description: "KONアカウントにログインします",
+  title: "ログイン | HiCrew",
+  description: "HiCrewアカウントにログインします",
 };
 
 export default function LoginPage() {
   return (
-    <div className="w-full max-w-md">
-      <Card padding="lg" className="shadow-xl">
-        {/* Logo & title */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg">
-            <span className="text-base font-bold text-white">KON</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">おかえりなさい</h1>
-          <p className="mt-1.5 text-sm text-gray-500">
-            アカウントにログインしてください
-          </p>
+    <div className="w-full max-w-md rounded-2xl bg-white px-10 py-12 shadow-xl">
+      {/* Logo */}
+      <div className="flex flex-col items-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black">
+          <span className="text-lg font-bold text-white">H</span>
         </div>
+        <span className="mt-2 text-base font-bold text-text-primary">HiCrew</span>
+      </div>
 
-        <form action="/api/auth/login" method="POST" className="flex flex-col gap-5">
-          <Input
-            label="メールアドレス"
-            type="email"
-            name="email"
-            placeholder="taro@example.com"
-            required
-            autoComplete="email"
-          />
+      {/* Heading */}
+      <h1 className="mt-8 text-center text-2xl font-bold text-text-primary">
+        Hi! はじめましょう！
+      </h1>
+      <p className="mt-2 text-center text-sm text-text-muted">
+        AIチームがあなたの業務を効率化しています。
+      </p>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <label
-                htmlFor="password"
-                className="text-sm font-medium text-gray-700"
-              >
-                パスワード
-                <span className="ml-1 text-violet-600" aria-label="必須">*</span>
-              </label>
-              <Link
-                href="/reset-password"
-                className="text-xs text-violet-600 hover:text-violet-700 transition-colors"
-              >
-                パスワードを忘れた場合
-              </Link>
-            </div>
-            <input
-              id="password"
-              type="password"
-              name="password"
-              placeholder="パスワードを入力"
-              required
-              autoComplete="current-password"
-              className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 transition-colors duration-150 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Remember me */}
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              name="rememberMe"
-              className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 cursor-pointer"
-            />
-            <span className="text-sm text-gray-600">ログイン状態を保持する</span>
-          </label>
-
-          <Link href="/mypage">
-            <Button variant="primary" size="lg" fullWidth>
-              ログイン
-            </Button>
-          </Link>
-        </form>
-
-        {/* Divider */}
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-3 text-gray-400">または</span>
-          </div>
-        </div>
-
-        {/* Google login */}
+      {/* SSO Buttons */}
+      <div className="mt-8 flex flex-col gap-3">
+        {/* Google */}
         <button
           type="button"
-          className="flex w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white py-2.5 px-4 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors duration-150 cursor-pointer"
-          aria-label="Googleアカウントでログイン"
+          className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-border-default bg-white text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-gray-50 cursor-pointer"
+          aria-label="Googleでログイン"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -103,16 +41,21 @@ export default function LoginPage() {
           Googleでログイン
         </button>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          アカウントをお持ちでない方は{" "}
-          <Link
-            href="/register"
-            className="font-medium text-violet-600 hover:text-violet-700 transition-colors"
-          >
-            新規登録
-          </Link>
-        </p>
-      </Card>
+        {/* Microsoft 365 */}
+        <button
+          type="button"
+          className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-border-default bg-white text-sm font-medium text-text-primary transition-colors duration-150 hover:bg-gray-50 cursor-pointer"
+          aria-label="Microsoft 365でログイン"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+            <rect x="13" y="1" width="10" height="10" fill="#7FBA00" />
+            <rect x="1" y="13" width="10" height="10" fill="#00A4EF" />
+            <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+          </svg>
+          Microsoft 365でログイン
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,210 +1,214 @@
-import React from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+"use client";
 
-export const metadata = {
-  title: "プラン選択 | KON",
-  description: "ご利用プランをお選びください",
-};
+import React, { useState } from "react";
+import Link from "next/link";
+import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 interface Plan {
   id: string;
   name: string;
   price: string;
-  priceNote: string;
+  credit: string;
+  crewCount: string;
+  crewIcon: React.ReactNode;
   description: string;
-  features: string[];
-  highlighted: boolean;
-  badge?: string;
+  popular?: boolean;
 }
+
+const PersonIcon = () => (
+  <svg
+    className="h-4 w-4 text-gray-400"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+    />
+  </svg>
+);
+
+const PeopleIcon = () => (
+  <svg
+    className="h-4 w-4 text-gray-400"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
+    />
+  </svg>
+);
+
+const BuildingIcon = () => (
+  <svg
+    className="h-4 w-4 text-gray-400"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={1.5}
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+    />
+  </svg>
+);
 
 const plans: Plan[] = [
   {
-    id: "free",
-    name: "フリー",
-    price: "¥0",
-    priceNote: "/ 月（無料）",
-    description: "個人での試用に最適",
-    features: [
-      "月5回までの利用",
-      "基本機能すべて利用可",
-      "1GBストレージ",
-      "メールサポート",
-    ],
-    highlighted: false,
+    id: "starter",
+    name: "Starter",
+    price: "¥0,000",
+    credit: "0,000",
+    crewCount: "1名",
+    crewIcon: <PersonIcon />,
+    description: "優秀なリーダーが1人いればいい。",
   },
   {
-    id: "standard",
-    name: "スタンダード",
-    price: "¥2,980",
-    priceNote: "/ 月（税込）",
-    description: "個人・小チームの本格利用に",
-    features: [
-      "無制限の利用",
-      "全機能利用可",
-      "20GBストレージ",
-      "優先メールサポート",
-      "データエクスポート",
-    ],
-    highlighted: true,
-    badge: "人気",
+    id: "team",
+    name: "Team",
+    price: "¥00,000",
+    credit: "0,000",
+    crewCount: "3名",
+    crewIcon: <PeopleIcon />,
+    description: "複数人のAIによる連携プレイを実現。",
+    popular: true,
   },
   {
-    id: "pro",
-    name: "プロ",
-    price: "¥9,800",
-    priceNote: "/ 月（税込）",
-    description: "チーム・企業向けの高機能プラン",
-    features: [
-      "無制限の利用",
-      "全機能 + 優先新機能",
-      "無制限ストレージ",
-      "電話・チャットサポート",
-      "データエクスポート",
-      "チームメンバー管理",
-      "SSO対応",
-    ],
-    highlighted: false,
+    id: "enterprise",
+    name: "Enterprise",
+    price: "¥00,000",
+    credit: "0,000",
+    crewCount: "5名",
+    crewIcon: <BuildingIcon />,
+    description: "部門まるごとAI化。専用モデル提供。",
   },
 ];
 
 export default function RegisterPlanPage() {
+  const [selectedPlan, setSelectedPlan] = useState("team");
+
   return (
-    <div className="w-full max-w-2xl">
-      {/* Progress */}
-      <div className="mb-6 flex items-center gap-2">
-        {[1, 2, 3].map((step) => (
-          <div key={step} className="flex items-center gap-2">
-            <div
-              className={[
-                "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold",
-                step === 1
-                  ? "bg-violet-300 text-white"
-                  : step === 2
-                  ? "bg-violet-600 text-white"
-                  : "bg-gray-100 text-gray-400",
-              ].join(" ")}
-            >
-              {step === 1 ? (
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              ) : (
-                step
-              )}
-            </div>
-            {step < 3 && (
-              <div
-                className={[
-                  "h-0.5 w-10 rounded-full",
-                  step === 1 ? "bg-violet-400" : "bg-gray-200",
-                ].join(" ")}
-              />
-            )}
+    <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl">
+      {/* Left Panel */}
+      <div className="flex w-[280px] shrink-0 flex-col bg-[#111111] p-8">
+        {/* HiCrew Logo */}
+        <div className="mb-12 flex flex-col items-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 border border-white/20">
+            <span className="text-sm font-bold text-white">H</span>
           </div>
-        ))}
-        <span className="ml-2 text-xs text-gray-500">プラン選択</span>
+          <span className="mt-2 text-sm font-bold text-white">HiCrew</span>
+        </div>
+
+        {/* Stepper */}
+        <RegistrationStepper currentStep={2} />
       </div>
 
-      <Card padding="lg" className="shadow-xl">
-        <h1 className="mb-1 text-xl font-bold text-gray-900">プランを選択</h1>
-        <p className="mb-6 text-sm text-gray-500">
-          いつでもアップグレード・ダウングレードできます
+      {/* Right Panel */}
+      <div className="flex flex-1 flex-col p-8">
+        <h1 className="text-2xl font-bold text-gray-900">プラン選択</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          チーム規模や必要なクレジットに合わせてプランを選びましょう。
         </p>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {plans.map((plan) => (
-            <label
-              key={plan.id}
-              className={[
-                "relative flex cursor-pointer flex-col rounded-2xl border-2 p-5 transition-all duration-150",
-                plan.highlighted
-                  ? "border-violet-500 bg-violet-50 shadow-md"
-                  : "border-gray-200 bg-white hover:border-violet-300",
-              ].join(" ")}
-            >
-              {/* Recommended badge */}
-              {plan.badge && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-600 px-3 py-0.5 text-xs font-semibold text-white">
-                  {plan.badge}
-                </span>
-              )}
-
-              {/* Radio */}
-              <input
-                type="radio"
-                name="plan"
-                value={plan.id}
-                defaultChecked={plan.highlighted}
-                className="sr-only"
-              />
-
-              <div className="mb-3">
-                <p className={[
-                  "text-base font-bold",
-                  plan.highlighted ? "text-violet-700" : "text-gray-900",
-                ].join(" ")}>
-                  {plan.name}
-                </p>
-                <p className="mt-0.5 text-xs text-gray-500">{plan.description}</p>
-              </div>
-
-              <div className="mb-4">
-                <span className={[
-                  "text-2xl font-bold",
-                  plan.highlighted ? "text-violet-700" : "text-gray-900",
-                ].join(" ")}>
-                  {plan.price}
-                </span>
-                <span className="text-xs text-gray-500"> {plan.priceNote}</span>
-              </div>
-
-              <ul className="flex flex-col gap-1.5 text-xs text-gray-600">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-1.5">
-                    <svg
-                      className={[
-                        "mt-0.5 h-3.5 w-3.5 shrink-0",
-                        plan.highlighted ? "text-violet-500" : "text-green-500",
-                      ].join(" ")}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2.5}
-                      aria-hidden="true"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              {/* Selection indicator */}
-              {plan.highlighted && (
-                <div className="mt-4 flex items-center gap-1.5 text-xs font-medium text-violet-600">
-                  <div className="h-3 w-3 rounded-full bg-violet-600" />
-                  選択中
-                </div>
-              )}
-            </label>
-          ))}
-        </div>
-
+        {/* Plan Cards */}
         <div className="mt-6 flex flex-col gap-3">
-          <Link href="/register/confirm">
-            <Button variant="primary" size="lg" fullWidth>
-              このプランで続ける
-            </Button>
-          </Link>
-          <Link href="/register/profile">
-            <Button variant="ghost" size="md" fullWidth>
+          {plans.map((plan) => {
+            const isSelected = selectedPlan === plan.id;
+            return (
+              <label
+                key={plan.id}
+                className={[
+                  "relative flex cursor-pointer items-center gap-4 rounded-xl border-2 px-5 py-4 transition-all",
+                  isSelected
+                    ? "border-[#7C3AED] bg-white"
+                    : "border-gray-200 bg-white hover:border-gray-300",
+                ].join(" ")}
+              >
+                {/* Popular badge */}
+                {plan.popular && (
+                  <span className="absolute -top-3 left-4 rounded-full bg-[#7C3AED] px-3 py-0.5 text-xs font-semibold text-white">
+                    人気！
+                  </span>
+                )}
+
+                {/* Radio */}
+                <input
+                  type="radio"
+                  name="plan"
+                  value={plan.id}
+                  checked={isSelected}
+                  onChange={() => setSelectedPlan(plan.id)}
+                  className="h-4 w-4 shrink-0 accent-[#7C3AED]"
+                />
+
+                {/* Plan name */}
+                <span className="w-24 shrink-0 text-base font-bold text-gray-900">
+                  {plan.name}
+                </span>
+
+                {/* Price & description */}
+                <div className="flex flex-1 flex-col">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-bold text-gray-900">
+                      {plan.price}
+                    </span>
+                    <span className="text-sm text-gray-400">
+                      {plan.credit} クレジット
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {plan.description}
+                  </span>
+                </div>
+
+                {/* Crew count */}
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="text-xs text-gray-400">クルー数</span>
+                  <div className="flex items-center gap-1">
+                    {plan.crewIcon}
+                    <span className="text-sm font-bold text-gray-900">
+                      {plan.crewCount}
+                    </span>
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Navigation */}
+        <div className="mt-auto flex justify-end gap-3 pt-6">
+          <Link href="/register/basic">
+            <button
+              type="button"
+              className="cursor-pointer rounded-lg border border-gray-300 bg-white px-6 h-11 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
               戻る
-            </Button>
+            </button>
+          </Link>
+          <Link href="/register/member">
+            <button
+              type="button"
+              className="cursor-pointer rounded-lg bg-black px-8 h-11 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
+            >
+              次へ
+            </button>
           </Link>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

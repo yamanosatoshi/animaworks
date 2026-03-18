@@ -1,5 +1,4 @@
 import React from "react";
-import { AuthHeader } from "@/components/layout/AuthHeader";
 
 export default function AuthLayout({
   children,
@@ -7,11 +6,11 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-violet-100 via-indigo-50 to-purple-100">
-      <AuthHeader />
-      <main className="flex min-h-screen items-center justify-center px-4 py-24">
-        {children}
-      </main>
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-12"
+      style={{ background: "linear-gradient(135deg, #E8EEFF 0%, #F5E8FF 50%, #FFE8F5 100%)" }}
+    >
+      {children}
     </div>
   );
 }

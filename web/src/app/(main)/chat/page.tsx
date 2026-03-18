@@ -1,24 +1,35 @@
 "use client";
 
-import React, { Suspense, useState, useRef, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface Message {
+interface CrewMember {
   id: string;
-  role: "user" | "ai";
-  content: string;
-  timestamp: string;
+  name: string;
+  initial: string;
+  color: string;
 }
 
 interface Channel {
   id: string;
   name: string;
-  avatar: string;
-  status: "online" | "offline";
+  members: string[]; // crew member ids
+  lastMessage: string;
+}
+
+interface ChatMessage {
+  id: string;
+  senderId: string;
+  content: string;
+  timestamp: string;
+}
+
+interface Suggestion {
+  id: string;
+  title: string;
   description: string;
 }
 
@@ -26,66 +37,141 @@ interface Channel {
 // Dummy data
 // ---------------------------------------------------------------------------
 
-const channels: Record<string, Channel> = {
-  aoi: {
-    id: "aoi",
-    name: "葵（Aoi）",
-    avatar: "A",
-    status: "online",
-    description: "フレンドリーなAIアシスタント",
+const crewMembers: CrewMember[] = [
+  { id: "taro", name: "太郎", initial: "太", color: "bg-violet-400" },
+  { id: "sakura", name: "さくら", initial: "さ", color: "bg-pink-400" },
+  { id: "kenshiro", name: "ケンシロウ", initial: "ケ", color: "bg-blue-400" },
+  { id: "aoi", name: "葵", initial: "葵", color: "bg-emerald-400" },
+  { id: "umeda", name: "吉田梅", initial: "梅", color: "bg-amber-400" },
+  { id: "kuura", name: "くうら", initial: "く", color: "bg-rose-400" },
+];
+
+const crewMap = Object.fromEntries(crewMembers.map((m) => [m.id, m]));
+
+const channels: Channel[] = [
+  {
+    id: "general",
+    name: "#全体チャット",
+    members: ["taro", "sakura", "kenshiro", "aoi", "umeda"],
+    lastMessage: "今日のミーティングは15時からです",
   },
-  ren: {
-    id: "ren",
-    name: "蓮（Ren）",
-    avatar: "R",
-    status: "online",
-    description: "ビジネス特化AIアドバイザー",
+  {
+    id: "web-renewal",
+    name: "#Webリニューアル",
+    members: ["taro", "kenshiro", "aoi"],
+    lastMessage: "カラースキーム、少し調整したほうがいいかもしれません。",
   },
-  hina: {
-    id: "hina",
-    name: "陽菜（Hina）",
-    avatar: "H",
-    status: "offline",
-    description: "クリエイティブ・コンサルタント",
+  {
+    id: "sns-marketing",
+    name: "#SNSマーケ",
+    members: ["sakura", "umeda"],
+    lastMessage: "来週のキャンペーン企画を共有しました",
   },
+  {
+    id: "design-consult",
+    name: "#デザイン相談",
+    members: ["aoi", "kenshiro", "kuura"],
+    lastMessage: "ワイヤーフレームのフィードバックお願いします",
+  },
+];
+
+const messagesData: Record<string, ChatMessage[]> = {
+  "web-renewal": [
+    {
+      id: "1",
+      senderId: "taro",
+      content: "トップページのデザイン、レビューお願いします",
+      timestamp: "10:30",
+    },
+    {
+      id: "2",
+      senderId: "kenshiro",
+      content:
+        "レスポンシブ対応のブレークポイント確認しました。問題なさそうです。",
+      timestamp: "10:35",
+    },
+    {
+      id: "3",
+      senderId: "aoi",
+      content:
+        "カラースキーム、少し調整したほうがいいかもしれません。提案書を共有しますね。",
+      timestamp: "10:42",
+    },
+    {
+      id: "4",
+      senderId: "kuura",
+      content: "クライアントからのフィードバックも共有しておきます。",
+      timestamp: "11:00",
+    },
+  ],
+  general: [
+    {
+      id: "1",
+      senderId: "taro",
+      content: "おはようございます！今日もよろしくお願いします。",
+      timestamp: "9:00",
+    },
+    {
+      id: "2",
+      senderId: "sakura",
+      content: "おはようございます！今日のミーティングは15時からです。",
+      timestamp: "9:05",
+    },
+  ],
+  "sns-marketing": [
+    {
+      id: "1",
+      senderId: "sakura",
+      content: "来週のキャンペーン企画を共有しました。確認お願いします！",
+      timestamp: "14:00",
+    },
+    {
+      id: "2",
+      senderId: "umeda",
+      content: "確認しました。いくつか修正案を出しますね。",
+      timestamp: "14:20",
+    },
+  ],
+  "design-consult": [
+    {
+      id: "1",
+      senderId: "aoi",
+      content: "新しいワイヤーフレームをアップしました。フィードバックお願いします。",
+      timestamp: "11:30",
+    },
+    {
+      id: "2",
+      senderId: "kenshiro",
+      content: "技術的な制約を考慮して、いくつかコメントしました。",
+      timestamp: "11:45",
+    },
+    {
+      id: "3",
+      senderId: "kuura",
+      content: "ワイヤーフレームのフィードバックお願いします",
+      timestamp: "12:00",
+    },
+  ],
 };
 
-const defaultChannel: Channel = channels.aoi;
-
-const dummyMessages: Message[] = [
+const suggestions: Suggestion[] = [
   {
     id: "1",
-    role: "ai",
-    content:
-      "こんにちは！葵です。今日はどんなことをお手伝いしましょうか？何でも気軽に聞いてくださいね。",
-    timestamp: "10:00",
+    title: "デザインガイドラインの統一",
+    description:
+      "現在のプロジェクトで使用しているカラーパレットとタイポグラフィを統一ガイドラインとしてまとめることを提案します。",
   },
   {
     id: "2",
-    role: "user",
-    content: "こんにちは！来週のプレゼン資料の構成について相談したいんだけど。",
-    timestamp: "10:01",
+    title: "パフォーマンス最適化の提案",
+    description:
+      "画像の遅延読み込みとコード分割により、ページロード時間を40%削減できる見込みです。",
   },
   {
     id: "3",
-    role: "ai",
-    content:
-      "もちろんです！プレゼン資料の構成ですね。まず、いくつか教えてください。\n\n1. プレゼンのテーマ・目的は何ですか？\n2. 対象のオーディエンスは誰ですか？\n3. 持ち時間はどのくらいですか？\n\nこれらが分かると、より具体的なアドバイスができます！",
-    timestamp: "10:01",
-  },
-  {
-    id: "4",
-    role: "user",
-    content:
-      "新規プロジェクトの提案で、経営層向け。持ち時間は15分くらいかな。",
-    timestamp: "10:02",
-  },
-  {
-    id: "5",
-    role: "ai",
-    content:
-      "15分の経営層向けプレゼンですね。以下の構成をおすすめします：\n\n**1. エグゼクティブサマリー（2分）**\n結論とインパクトを最初に提示\n\n**2. 課題の提示（3分）**\n現状の課題とビジネスインパクト\n\n**3. 提案内容（5分）**\nソリューションの概要・差別化ポイント\n\n**4. 実行計画とROI（3分）**\nタイムライン・コスト・期待効果\n\n**5. まとめとNext Steps（2分）**\n\n経営層は「結論ファースト」が好まれるので、最初にインパクトを出すのがポイントです。各セクションについて詳しく掘り下げましょうか？",
-    timestamp: "10:03",
+    title: "ユーザーテスト計画",
+    description:
+      "リニューアル後のUXを検証するため、5名のユーザーによるテストセッションの実施を推奨します。",
   },
 ];
 
@@ -93,7 +179,7 @@ const dummyMessages: Message[] = [
 // Icons
 // ---------------------------------------------------------------------------
 
-const SendIcon = () => (
+const ClipIcon = () => (
   <svg
     width="20"
     height="20"
@@ -106,69 +192,33 @@ const SendIcon = () => (
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
-      d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+      d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13"
     />
   </svg>
 );
 
-const InfoIcon = () => (
+const ArrowUpIcon = () => (
   <svg
     width="20"
     height="20"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
-    strokeWidth={1.8}
+    strokeWidth={2.5}
     aria-hidden="true"
   >
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
-      d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
+      d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"
     />
   </svg>
 );
 
-const PhoneIcon = () => (
+const ArrowRightIcon = () => (
   <svg
-    width="20"
-    height="20"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    aria-hidden="true"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
-    />
-  </svg>
-);
-
-const EllipsisIcon = () => (
-  <svg
-    width="20"
-    height="20"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    aria-hidden="true"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
-    />
-  </svg>
-);
-
-const PlusIcon = () => (
-  <svg
-    width="20"
-    height="20"
+    width="14"
+    height="14"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -178,7 +228,7 @@ const PlusIcon = () => (
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
-      d="M12 4.5v15m7.5-7.5h-15"
+      d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
     />
   </svg>
 );
@@ -187,180 +237,147 @@ const PlusIcon = () => (
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** Top bar showing character info */
-function ChatHeader({ channel }: { channel: Channel }) {
+/** Top crew member bar */
+function CrewBar({ members }: { members: CrewMember[] }) {
   return (
-    <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-      <div className="flex items-center gap-3">
-        {/* Avatar */}
-        <div className="relative">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-sm font-bold text-white">
-            {channel.avatar}
+    <div className="flex h-16 shrink-0 items-center gap-5 overflow-x-auto border-b border-gray-200 bg-white px-6">
+      {members.map((m) => (
+        <div key={m.id} className="flex flex-col items-center gap-1 shrink-0">
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-full ${m.color} text-sm font-bold text-white`}
+          >
+            {m.initial}
           </div>
-          {/* Online indicator */}
-          <span
-            className={[
-              "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white",
-              channel.status === "online" ? "bg-emerald-400" : "bg-gray-300",
-            ].join(" ")}
-            aria-label={
-              channel.status === "online" ? "オンライン" : "オフライン"
-            }
-          />
+          <span className="text-xs text-gray-600">{m.name}</span>
         </div>
-        {/* Name & description */}
-        <div>
-          <h1 className="text-sm font-semibold text-gray-900">
-            {channel.name}
-          </h1>
-          <p className="text-xs text-gray-500">{channel.description}</p>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          aria-label="音声通話"
-        >
-          <PhoneIcon />
-        </button>
-        <button
-          type="button"
-          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          aria-label="情報"
-        >
-          <InfoIcon />
-        </button>
-        <button
-          type="button"
-          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          aria-label="その他"
-        >
-          <EllipsisIcon />
-        </button>
-      </div>
-    </header>
-  );
-}
-
-/** Single message bubble */
-function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
-
-  return (
-    <div
-      className={[
-        "flex gap-3",
-        isUser ? "flex-row-reverse" : "flex-row",
-      ].join(" ")}
-    >
-      {/* Avatar (AI only) */}
-      {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 text-xs font-bold text-white">
-          AI
-        </div>
-      )}
-
-      {/* Bubble */}
-      <div
-        className={[
-          "max-w-[70%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-          isUser
-            ? "rounded-br-md bg-violet-600 text-white"
-            : "rounded-bl-md bg-white text-gray-800 shadow-sm border border-gray-100",
-        ].join(" ")}
-      >
-        {/* Render newlines + simple bold */}
-        {message.content.split("\n").map((line, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <br />}
-            {line.split(/(\*\*[^*]+\*\*)/).map((seg, j) =>
-              seg.startsWith("**") && seg.endsWith("**") ? (
-                <strong key={j} className="font-semibold">
-                  {seg.slice(2, -2)}
-                </strong>
-              ) : (
-                <span key={j}>{seg}</span>
-              )
-            )}
-          </React.Fragment>
-        ))}
-      </div>
-
-      {/* Timestamp */}
-      <span
-        className={[
-          "mt-auto mb-1 shrink-0 text-[11px] text-gray-400",
-          isUser ? "text-right" : "text-left",
-        ].join(" ")}
-      >
-        {message.timestamp}
-      </span>
+      ))}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main page component
-// ---------------------------------------------------------------------------
+/** Stacked avatar group for channel members */
+function AvatarStack({ memberIds }: { memberIds: string[] }) {
+  const shown = memberIds.slice(0, 4);
+  return (
+    <div className="flex -space-x-2">
+      {shown.map((id) => {
+        const m = crewMap[id];
+        if (!m) return null;
+        return (
+          <div
+            key={id}
+            className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-white ${m.color} text-[10px] font-bold text-white`}
+          >
+            {m.initial}
+          </div>
+        );
+      })}
+      {memberIds.length > 4 && (
+        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-gray-300 text-[10px] font-bold text-gray-600">
+          +{memberIds.length - 4}
+        </div>
+      )}
+    </div>
+  );
+}
 
-function ChatContent() {
-  const searchParams = useSearchParams();
-  const channelId = searchParams.get("channel") ?? "aoi";
-  const channel = channels[channelId] ?? defaultChannel;
+/** Left column — Board/Channel list */
+function ChannelList({
+  channels: chs,
+  activeId,
+  onSelect,
+}: {
+  channels: Channel[];
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
+      <div className="px-4 py-4">
+        <h2 className="text-sm font-bold text-gray-900">チャット会議体</h2>
+      </div>
+      <nav className="flex-1 overflow-y-auto" aria-label="チャンネルリスト">
+        <ul className="flex flex-col gap-0.5 px-2">
+          {chs.map((ch) => {
+            const isActive = ch.id === activeId;
+            return (
+              <li key={ch.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(ch.id)}
+                  className={[
+                    "flex w-full flex-col gap-1.5 rounded-lg px-3 py-2.5 text-left transition-colors",
+                    isActive
+                      ? "border-l-2 border-[#7C3AED] bg-purple-50"
+                      : "hover:bg-gray-50",
+                  ].join(" ")}
+                  aria-current={isActive ? "true" : undefined}
+                >
+                  <span className="text-sm font-medium text-gray-900">
+                    {ch.name}
+                  </span>
+                  <AvatarStack memberIds={ch.members} />
+                  <p className="truncate text-xs text-gray-400">
+                    {ch.lastMessage}
+                  </p>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </aside>
+  );
+}
 
-  const [messages, setMessages] = useState<Message[]>(dummyMessages);
+/** Single chat message */
+function MessageRow({ message }: { message: ChatMessage }) {
+  const sender = crewMap[message.senderId];
+  if (!sender) return null;
+
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${sender.color} text-xs font-bold text-white`}
+      >
+        {sender.initial}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-bold text-gray-900">{sender.name}</span>
+          <span className="text-xs text-gray-400">{message.timestamp}</span>
+        </div>
+        <p className="mt-0.5 text-sm text-gray-700">{message.content}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Center column — Chat body */
+function ChatBody({
+  channel,
+  messages,
+  onSend,
+}: {
+  channel: Channel;
+  messages: ChatMessage[];
+  onSend: (text: string) => void;
+}) {
   const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-    }
-  }, [input]);
-
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text) return;
-
-    const now = new Date();
-    const ts = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-    // Add user message
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: text,
-      timestamp: ts,
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    onSend(text);
     setInput("");
+  }, [input, onSend]);
 
-    // Simulate AI reply after short delay
-    setTimeout(() => {
-      const aiMsg: Message = {
-        id: `ai-${Date.now()}`,
-        role: "ai",
-        content:
-          "承知しました！少々お待ちください。現在、内容を確認しています...",
-        timestamp: ts,
-      };
-      setMessages((prev) => [...prev, aiMsg]);
-    }, 800);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -368,94 +385,153 @@ function ChatContent() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
+    <div className="flex min-w-0 flex-1 flex-col">
       {/* Header */}
-      <ChatHeader channel={channel} />
+      <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
+        <h1 className="text-lg font-bold text-gray-900">{channel.name}</h1>
+        <span className="text-sm text-gray-400">
+          {channel.members.length}人のメンバー
+        </span>
+      </header>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {/* Date divider */}
-          <div className="flex items-center gap-3 py-2">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-xs font-medium text-gray-400">今日</span>
-            <div className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          {/* Messages */}
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto bg-gray-50 px-6 py-6">
+        <div className="flex flex-col gap-5">
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageRow key={msg.id} message={msg} />
           ))}
-          <div ref={messagesEndRef} />
+          <div ref={endRef} />
         </div>
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-gray-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-3xl items-end gap-3">
-          {/* Attachment button */}
+      {/* Input bar */}
+      <div className="border-t border-gray-200 bg-white px-6 py-3">
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            className="mb-0.5 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             aria-label="ファイル添付"
           >
-            <PlusIcon />
+            <ClipIcon />
           </button>
 
-          {/* Text input */}
-          <div className="relative flex-1">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力..."
-              rows={1}
-              className="w-full resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 pr-12 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20"
-              aria-label="メッセージ入力"
-            />
-          </div>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="メッセージを入力..."
+            className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+            aria-label="メッセージ入力"
+          />
 
-          {/* Send button */}
           <button
             type="button"
             onClick={handleSend}
             disabled={!input.trim()}
             className={[
-              "mb-0.5 flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors",
               input.trim()
-                ? "bg-violet-600 text-white hover:bg-violet-700 cursor-pointer"
-                : "bg-gray-200 text-gray-400 cursor-not-allowed",
+                ? "cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]"
+                : "cursor-not-allowed bg-gray-200 text-gray-400",
             ].join(" ")}
             aria-label="送信"
           >
-            <SendIcon />
+            <ArrowUpIcon />
           </button>
         </div>
-
-        {/* Hint */}
-        <p className="mx-auto mt-2 max-w-3xl text-center text-[11px] text-gray-400">
-          Shift + Enter で改行 ・ Enter で送信
-        </p>
       </div>
     </div>
   );
 }
 
+/** Right column — Suggestions panel */
+function SuggestionsPanel({ items }: { items: Suggestion[] }) {
+  return (
+    <aside className="flex h-full w-72 shrink-0 flex-col overflow-y-auto border-l border-gray-200 bg-white">
+      <div className="px-4 py-4">
+        <h2 className="text-sm font-bold text-gray-900">提案事項</h2>
+      </div>
+      <div className="flex flex-col gap-3 px-4 pb-4">
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className="rounded-lg border border-gray-200 bg-white p-3"
+          >
+            <h3 className="text-sm font-medium text-gray-900">{item.title}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500">
+              {item.description}
+            </p>
+            <button
+              type="button"
+              className="mt-2 flex items-center gap-1 text-xs font-medium text-[#7C3AED] transition-colors hover:text-[#6D28D9]"
+            >
+              タスクに変換
+              <ArrowRightIcon />
+            </button>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Page export (Suspense boundary for useSearchParams)
+// Page
 // ---------------------------------------------------------------------------
 
 export default function ChatPage() {
+  const [activeChannelId, setActiveChannelId] = useState("web-renewal");
+  const [allMessages, setAllMessages] = useState(messagesData);
+
+  const activeChannel =
+    channels.find((c) => c.id === activeChannelId) ?? channels[0];
+  const activeMessages = allMessages[activeChannelId] ?? [];
+
+  const handleSend = useCallback(
+    (text: string) => {
+      const now = new Date();
+      const ts = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+      const newMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        senderId: "taro",
+        content: text,
+        timestamp: ts,
+      };
+
+      setAllMessages((prev) => ({
+        ...prev,
+        [activeChannelId]: [...(prev[activeChannelId] ?? []), newMsg],
+      }));
+    },
+    [activeChannelId]
+  );
+
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center bg-gray-50">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
-        </div>
-      }
-    >
-      <ChatContent />
-    </Suspense>
+    <div className="flex h-full flex-col">
+      {/* Top crew bar */}
+      <CrewBar members={crewMembers} />
+
+      {/* 3-column layout */}
+      <div className="flex min-h-0 flex-1">
+        {/* Left — Channel list */}
+        <ChannelList
+          channels={channels}
+          activeId={activeChannelId}
+          onSelect={setActiveChannelId}
+        />
+
+        {/* Center — Chat body */}
+        <ChatBody
+          channel={activeChannel}
+          messages={activeMessages}
+          onSend={handleSend}
+        />
+
+        {/* Right — Suggestions */}
+        <SuggestionsPanel items={suggestions} />
+      </div>
+    </div>
   );
 }
