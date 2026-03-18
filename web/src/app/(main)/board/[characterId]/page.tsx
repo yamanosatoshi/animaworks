@@ -1,12 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React from "react";
 import { useParams, useRouter } from "next/navigation";
-import type { ChatMessage, BoardCharacter } from "@/types/chat";
-import { CharacterHeader } from "@/components/chat/CharacterHeader";
-import { MessageBubble } from "@/components/chat/MessageBubble";
-import { StreamingMessage } from "@/components/chat/StreamingMessage";
-import { InputBar } from "@/components/chat/InputBar";
+import Link from "next/link";
+import type { ChatMessage, BoardCharacter, LLMProvider } from "@/types/chat";
+import { ChatBoard } from "@/components/chat/ChatBoard";
 
 // ---------------------------------------------------------------------------
 // Dummy characters (shared data — later extract to a data layer)
@@ -88,6 +86,34 @@ const characters: BoardCharacter[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// LLM badge config (for sidebar)
+// ---------------------------------------------------------------------------
+
+const llmBadgeConfig: Record<
+  LLMProvider,
+  { label: string; bg: string; text: string }
+> = {
+  claude: { label: "Claude", bg: "bg-purple-100", text: "text-purple-700" },
+  gemini: { label: "Gemini", bg: "bg-blue-100", text: "text-blue-700" },
+  openai: { label: "OpenAI", bg: "bg-emerald-100", text: "text-emerald-700" },
+};
+
+// ---------------------------------------------------------------------------
+// Status helpers
+// ---------------------------------------------------------------------------
+
+function statusDot(s: BoardCharacter["status"]): string {
+  switch (s) {
+    case "online":
+      return "bg-emerald-500";
+    case "busy":
+      return "bg-amber-500";
+    case "offline":
+      return "bg-gray-400";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dummy messages per board
 // ---------------------------------------------------------------------------
 
@@ -131,7 +157,8 @@ function makeDummyMessages(char: BoardCharacter): ChatMessage[] {
       boardId: char.id,
       senderType: "user",
       senderName: "あなた",
-      content: "ありがとう。実はプロジェクトの進め方で悩んでいて、アドバイスがほしいんだ。",
+      content:
+        "ありがとう。実はプロジェクトの進め方で悩んでいて、アドバイスがほしいんだ。",
       timestamp: t(5),
     },
     {
@@ -168,72 +195,80 @@ function makeDummyMessages(char: BoardCharacter): ChatMessage[] {
 }
 
 // ---------------------------------------------------------------------------
-// SSE streaming simulation hook
+// Character sidebar — shows all characters, highlights active one
 // ---------------------------------------------------------------------------
 
-function useStreamingSimulation(
-  messages: ChatMessage[],
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
-  character: BoardCharacter,
-) {
-  const streamingRef = useRef(false);
+function CharacterSidebar({
+  characters: chars,
+  activeId,
+}: {
+  characters: BoardCharacter[];
+  activeId: string;
+}) {
+  return (
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-white lg:flex">
+      {/* Sidebar header */}
+      <div className="border-b border-gray-100 px-4 py-4">
+        <h2 className="text-sm font-semibold text-gray-900">キャラクター</h2>
+        <p className="mt-0.5 text-xs text-gray-500">ボードを切り替える</p>
+      </div>
 
-  const simulateStream = useCallback(
-    (userText: string) => {
-      if (streamingRef.current) return;
-      streamingRef.current = true;
+      {/* Character list */}
+      <nav className="flex-1 overflow-y-auto py-2">
+        {chars.map((ch) => {
+          const isActive = ch.id === activeId;
+          const badge = llmBadgeConfig[ch.llmProvider];
+          return (
+            <Link
+              key={ch.id}
+              href={`/board/${ch.id}`}
+              className={[
+                "flex items-center gap-3 px-4 py-3 transition-colors",
+                isActive
+                  ? "bg-violet-50 border-r-2 border-violet-600"
+                  : "hover:bg-gray-50",
+              ].join(" ")}
+            >
+              {/* Avatar */}
+              <div className="relative">
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${ch.avatarColor} text-sm font-bold text-white`}
+                >
+                  {ch.avatar}
+                </div>
+                {/* Status dot */}
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${statusDot(ch.status)}`}
+                />
+              </div>
 
-      const replyText =
-        `なるほど、「${userText.slice(0, 20)}${userText.length > 20 ? "..." : ""}」についてですね。\n\n` +
-        "承知しました。少し整理してお伝えしますね。\n\n" +
-        "**ポイント1**: まずは現状を整理することが大切です。\n" +
-        "**ポイント2**: 次に、優先度を付けてステップバイステップで進めましょう。\n\n" +
-        "詳しく掘り下げたい部分はありますか？";
-
-      const streamId = `stream-${Date.now()}`;
-      const streamMsg: ChatMessage = {
-        id: streamId,
-        boardId: character.id,
-        senderType: "ai_host",
-        senderName: character.name,
-        senderAvatar: character.avatar,
-        content: "",
-        timestamp: new Date().toISOString(),
-        llmProvider: character.llmProvider,
-        isStreaming: true,
-      };
-
-      setMessages((prev) => [...prev, streamMsg]);
-
-      let charIdx = 0;
-      const interval = setInterval(() => {
-        charIdx += 1 + Math.floor(Math.random() * 2);
-        if (charIdx >= replyText.length) {
-          charIdx = replyText.length;
-          clearInterval(interval);
-          streamingRef.current = false;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === streamId
-                ? { ...m, content: replyText, isStreaming: false }
-                : m,
-            ),
+              {/* Info */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={[
+                      "truncate text-sm font-medium",
+                      isActive ? "text-violet-900" : "text-gray-900",
+                    ].join(" ")}
+                  >
+                    {ch.name.split("（")[0]}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold ${badge.bg} ${badge.text}`}
+                  >
+                    {badge.label}
+                  </span>
+                </div>
+                <p className="truncate text-xs text-gray-500">
+                  {ch.description}
+                </p>
+              </div>
+            </Link>
           );
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === streamId
-                ? { ...m, content: replyText.slice(0, charIdx) }
-                : m,
-            ),
-          );
-        }
-      }, 30);
-    },
-    [character, setMessages],
+        })}
+      </nav>
+    </aside>
   );
-
-  return { simulateStream, isStreaming: streamingRef.current };
 }
 
 // ---------------------------------------------------------------------------
@@ -245,73 +280,23 @@ export default function BoardPage() {
   const router = useRouter();
   const characterId = params.characterId as string;
 
-  const character = characters.find((c) => c.id === characterId) ?? characters[0];
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    makeDummyMessages(character),
-  );
-
-  const { simulateStream } = useStreamingSimulation(
-    messages,
-    setMessages,
-    character,
-  );
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleSend = useCallback(
-    (text: string) => {
-      const userMsg: ChatMessage = {
-        id: `user-${Date.now()}`,
-        boardId: character.id,
-        senderType: "user",
-        senderName: "あなた",
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
-
-      // Simulate SSE streaming response after a short delay
-      setTimeout(() => simulateStream(text), 600);
-    },
-    [character.id, simulateStream],
-  );
+  const character =
+    characters.find((c) => c.id === characterId) ?? characters[0];
+  const initialMessages = makeDummyMessages(character);
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
-      {/* Header */}
-      <CharacterHeader
-        character={character}
-        onBack={() => router.push("/characters")}
-      />
+    <div className="flex h-full">
+      {/* Character sidebar (desktop) */}
+      <CharacterSidebar characters={characters} activeId={character.id} />
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {/* Date divider */}
-          <div className="flex items-center gap-3 py-2">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-xs font-medium text-gray-400">今日</span>
-            <div className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          {messages.map((msg) =>
-            msg.isStreaming ? (
-              <StreamingMessage key={msg.id} message={msg} />
-            ) : (
-              <MessageBubble key={msg.id} message={msg} />
-            ),
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+      {/* Main chat area */}
+      <div className="flex-1">
+        <ChatBoard
+          character={character}
+          initialMessages={initialMessages}
+          onBack={() => router.push("/characters")}
+        />
       </div>
-
-      {/* Input */}
-      <InputBar onSend={handleSend} />
     </div>
   );
 }

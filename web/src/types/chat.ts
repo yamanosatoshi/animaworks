@@ -45,3 +45,25 @@ export interface Board {
   hostCharacter: BoardCharacter;
   messages: ChatMessage[];
 }
+
+// ---------------------------------------------------------------------------
+// API-level types (for backend integration)
+// ---------------------------------------------------------------------------
+
+/** API message format — maps to backend schema */
+export interface Message {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+  animaId?: string;
+}
+
+/** API room format — maps to backend schema */
+export interface Room {
+  id: string;
+  animaId: string;
+  animaName: string;
+  model: LLMProvider;
+  avatarUrl?: string;
+}
