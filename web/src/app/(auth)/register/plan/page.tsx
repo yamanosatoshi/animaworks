@@ -17,7 +17,7 @@ interface Plan {
 
 const PersonIcon = () => (
   <svg
-    className="h-4 w-4 text-gray-400"
+    className="h-4 w-4 text-text-disabled"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -34,7 +34,7 @@ const PersonIcon = () => (
 
 const PeopleIcon = () => (
   <svg
-    className="h-4 w-4 text-gray-400"
+    className="h-4 w-4 text-text-disabled"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -51,7 +51,7 @@ const PeopleIcon = () => (
 
 const BuildingIcon = () => (
   <svg
-    className="h-4 w-4 text-gray-400"
+    className="h-4 w-4 text-text-disabled"
     fill="none"
     viewBox="0 0 24 24"
     stroke="currentColor"
@@ -101,9 +101,9 @@ export default function RegisterPlanPage() {
   const [selectedPlan, setSelectedPlan] = useState("team");
 
   return (
-    <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl">
+    <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white/95 backdrop-blur-sm shadow-lg">
       {/* Left Panel */}
-      <div className="flex w-[280px] shrink-0 flex-col bg-[#111111] p-8">
+      <div className="flex w-[280px] shrink-0 flex-col bg-sidebar-bg p-8">
         {/* HiCrew Logo */}
         <div className="mb-12 flex flex-col items-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 border border-white/20">
@@ -118,8 +118,8 @@ export default function RegisterPlanPage() {
 
       {/* Right Panel */}
       <div className="flex flex-1 flex-col p-8">
-        <h1 className="text-2xl font-bold text-gray-900">プラン選択</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-text-primary">プラン選択</h1>
+        <p className="mt-1 text-sm text-text-muted">
           チーム規模や必要なクレジットに合わせてプランを選びましょう。
         </p>
 
@@ -133,13 +133,13 @@ export default function RegisterPlanPage() {
                 className={[
                   "relative flex cursor-pointer items-center gap-4 rounded-xl border-2 px-5 py-4 transition-all",
                   isSelected
-                    ? "border-[#7C3AED] bg-white"
-                    : "border-gray-200 bg-white hover:border-gray-300",
+                    ? "border-accent bg-white"
+                    : "border-border-default bg-white hover:border-border-strong",
                 ].join(" ")}
               >
                 {/* Popular badge */}
                 {plan.popular && (
-                  <span className="absolute -top-3 left-4 rounded-full bg-[#7C3AED] px-3 py-0.5 text-xs font-semibold text-white">
+                  <span className="absolute -top-3 left-4 rounded-full bg-accent px-3 py-0.5 text-xs font-semibold text-white">
                     人気！
                   </span>
                 )}
@@ -151,35 +151,35 @@ export default function RegisterPlanPage() {
                   value={plan.id}
                   checked={isSelected}
                   onChange={() => setSelectedPlan(plan.id)}
-                  className="h-4 w-4 shrink-0 accent-[#7C3AED]"
+                  className="h-4 w-4 shrink-0 accent-accent"
                 />
 
                 {/* Plan name */}
-                <span className="w-24 shrink-0 text-base font-bold text-gray-900">
+                <span className="w-24 shrink-0 text-base font-bold text-text-primary">
                   {plan.name}
                 </span>
 
                 {/* Price & description */}
                 <div className="flex flex-1 flex-col">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-xl font-bold text-gray-900">
+                    <span className="text-xl font-bold text-text-primary">
                       {plan.price}
                     </span>
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-text-disabled">
                       {plan.credit} クレジット
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-text-disabled">
                     {plan.description}
                   </span>
                 </div>
 
                 {/* Crew count */}
                 <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  <span className="text-xs text-gray-400">クルー数</span>
+                  <span className="text-xs text-text-disabled">クルー数</span>
                   <div className="flex items-center gap-1">
                     {plan.crewIcon}
-                    <span className="text-sm font-bold text-gray-900">
+                    <span className="text-sm font-bold text-text-primary">
                       {plan.crewCount}
                     </span>
                   </div>
@@ -194,7 +194,7 @@ export default function RegisterPlanPage() {
           <Link href="/register/basic">
             <button
               type="button"
-              className="cursor-pointer rounded-lg border border-gray-300 bg-white px-6 h-11 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="cursor-pointer rounded-lg border border-border-strong bg-white px-6 h-11 text-sm font-medium text-text-secondary transition-colors hover:bg-gray-50"
             >
               戻る
             </button>

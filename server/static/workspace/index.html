@@ -142,10 +142,12 @@
                 <div class="ws-rp-card">
                   <div class="ws-rp-card-title">Check today's progress</div>
                   <div class="ws-rp-card-desc">Ask about task completion status</div>
+                  <button class="ws-rp-card-action">実行する</button>
                 </div>
                 <div class="ws-rp-card">
                   <div class="ws-rp-card-title">Review pending items</div>
                   <div class="ws-rp-card-desc">See tasks awaiting your approval</div>
+                  <button class="ws-rp-card-action">実行する</button>
                 </div>
               </div>
             </div>
@@ -156,30 +158,24 @@
                 <span class="ws-rp-icon">⚡</span> Quick Actions
               </div>
               <div class="ws-rp-actions-grid" id="wsRpActions">
-                <button class="ws-rp-action-btn" data-action="status">📊 Status</button>
-                <button class="ws-rp-action-btn" data-action="tasks">📋 Tasks</button>
-                <button class="ws-rp-action-btn" data-action="report">📝 Report</button>
-                <button class="ws-rp-action-btn" data-action="schedule">📅 Schedule</button>
+                <button class="ws-rp-action-btn" data-action="status">ステータス</button>
+                <button class="ws-rp-action-btn" data-action="tasks">タスク</button>
+                <button class="ws-rp-action-btn" data-action="report">レポート</button>
+                <button class="ws-rp-action-btn" data-action="schedule">スケジュール</button>
               </div>
             </div>
 
             <!-- Today's Team Summary -->
             <div class="ws-rp-section ws-rp-summary">
-              <div class="ws-rp-section-title">
-                <span class="ws-rp-icon">📋</span> TODAY'S TEAM SUMMARY
-              </div>
-              <div class="ws-rp-summary-content" id="wsRpSummary">
-                <div class="ws-rp-summary-item">
-                  <span class="ws-rp-summary-label">Active Members</span>
-                  <span class="ws-rp-summary-value" id="wsRpActiveCount">—</span>
+              <div class="ws-rp-summary-dark" id="wsRpSummary">
+                <div class="ws-rp-summary-header">TODAY'S TEAM SUMMARY</div>
+                <div class="ws-rp-summary-body" id="wsRpSummaryBody">
+                  <span class="ws-rp-summary-stat"><span id="wsRpActiveCount">—</span> アクティブ</span>
+                  <span class="ws-rp-summary-dot">·</span>
+                  <span class="ws-rp-summary-stat">本日のメッセージ <span id="wsRpMessageCount">—</span></span>
                 </div>
-                <div class="ws-rp-summary-item">
-                  <span class="ws-rp-summary-label">Messages Today</span>
-                  <span class="ws-rp-summary-value" id="wsRpMessageCount">—</span>
-                </div>
-                <div class="ws-rp-summary-item">
-                  <span class="ws-rp-summary-label">Tasks Completed</span>
-                  <span class="ws-rp-summary-value" id="wsRpTaskCount">—</span>
+                <div class="ws-rp-summary-avatar-wrap">
+                  <div class="ws-rp-summary-avatar" id="wsRpSummaryAvatar"></div>
                 </div>
               </div>
             </div>

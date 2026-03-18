@@ -1996,63 +1996,126 @@ html, body {
   line-height: 1.4;
 }
 
-/* Quick Actions Grid */
+.ws-rp-card-action {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s;
+}
+
+.ws-rp-card-action:hover {
+  background: #333;
+}
+
+/* Quick Actions — pill row */
 .ws-rp-actions-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .ws-rp-action-btn {
-  padding: 8px 6px;
-  font-size: 0.75rem;
+  padding: 5px 12px;
+  font-size: 0.73rem;
   font-weight: 500;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 100px;
   background: #fff;
   color: #333;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
-  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
 
 .ws-rp-action-btn:hover {
   background: #f0f4ff;
-  border-color: #c7d2fe;
-  transform: translateY(-1px);
+  border-color: #93c5fd;
 }
 
 .ws-rp-action-btn:active {
-  transform: translateY(0);
+  background: #e0e7ff;
 }
 
-/* Team Summary */
-.ws-rp-summary-content {
+/* Team Summary — dark card */
+.ws-rp-section.ws-rp-summary {
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: flex-end;
 }
 
-.ws-rp-summary-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #fff;
-  border: 1px solid #eee;
+.ws-rp-summary-dark {
+  position: relative;
+  background: #111827;
+  border-radius: 12px;
+  margin: 12px;
+  padding: 14px 14px 12px;
+  overflow: hidden;
+  min-height: 100px;
 }
 
-.ws-rp-summary-label {
-  font-size: 0.75rem;
-  color: #666;
-}
-
-.ws-rp-summary-value {
-  font-size: 0.85rem;
+.ws-rp-summary-header {
+  font-size: 0.65rem;
   font-weight: 700;
-  color: #1a1a1a;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+}
+
+.ws-rp-summary-body {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-right: 48px;
+}
+
+.ws-rp-summary-stat {
+  font-weight: 500;
+}
+
+.ws-rp-summary-dot {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.ws-rp-summary-avatar-wrap {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+}
+
+.ws-rp-summary-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.ws-rp-summary-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* ── Responsive ────────────────────── */

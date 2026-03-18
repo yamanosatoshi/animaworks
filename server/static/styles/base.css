@@ -17,6 +17,12 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* --- Global Focus Visible --- */
+:focus-visible {
+  outline: 2px solid var(--aw-color-accent);
+  outline-offset: 2px;
+}
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--aw-color-bg-secondary);

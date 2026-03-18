@@ -16,7 +16,7 @@ export function render(container) {
       <h2>${t("home.dashboard")}</h2>
     </div>
 
-    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+    <div class="card-grid--compact mb-6">
       <div class="stat-card" id="homeStatAnimas">
         <div class="stat-label">${t("home.anima_count")}</div>
         <div class="stat-value" id="homeAnimaCount">--</div>
@@ -31,7 +31,7 @@ export function render(container) {
       </div>
     </div>
 
-    <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card mb-6">
       <div class="card-header">${t("home.anima_list")}</div>
       <div class="card-body">
         <div class="org-tree" id="homeOrgTree">
@@ -40,7 +40,7 @@ export function render(container) {
       </div>
     </div>
 
-    <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card mb-6">
       <div class="card-header">${t("home.recent_activity")}</div>
       <div class="card-body">
         <div id="homeActivityTimeline">
@@ -49,14 +49,14 @@ export function render(container) {
       </div>
     </div>
 
-    <div class="card" id="homeExternalTasksCard" style="margin-bottom: 1.5rem;">
-      <div class="card-header" id="extTasksHeader" style="cursor:pointer;display:flex;align-items:center;gap:0.5rem;">
-        <span id="extTasksToggle" style="font-size:0.7rem;">&#x25BC;</span>
+    <div class="card mb-6" id="homeExternalTasksCard">
+      <div class="card-header ext-tasks-header" id="extTasksHeader">
+        <span class="ext-tasks-toggle" id="extTasksToggle">&#x25BC;</span>
         ${t("home.external_tasks")}
-        <span id="extTasksBadge" style="display:none;font-size:0.7rem;background:var(--accent-color,#2563eb);color:#fff;border-radius:10px;padding:0.1rem 0.5rem;margin-left:0.25rem;"></span>
-        <span style="flex:1;"></span>
-        <span id="extTasksLastUpdated" style="font-size:0.75rem;color:var(--text-secondary,#666);margin-right:0.5rem;"></span>
-        <button id="extTasksRefresh" class="btn-icon" title="${t("home.ext_refresh")}" style="font-size:0.85rem;">&#x21BB;</button>
+        <span id="extTasksBadge" class="badge-count" style="display:none;"></span>
+        <span class="header-spacer"></span>
+        <span id="extTasksLastUpdated" class="ext-tasks-last-updated"></span>
+        <button id="extTasksRefresh" class="btn-icon" title="${t("home.ext_refresh")}" aria-label="${t("home.ext_refresh")}">&#x21BB;</button>
       </div>
       <div class="card-body" id="extTasksBody">
         <div id="extTasksList">
@@ -67,11 +67,11 @@ export function render(container) {
 
     <div class="card">
       <div class="card-header">${t("home.quick_links")}</div>
-      <div class="card-body" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-        <a href="/workspace/" class="btn-primary" style="text-decoration:none;">${t("home.link_workspace")}</a>
-        <a href="#/chat" class="btn-secondary" style="text-decoration:none;">${t("home.link_chat")}</a>
-        <a href="#/animas" class="btn-secondary" style="text-decoration:none;">${t("home.link_animas")}</a>
-        <a href="#/memory" class="btn-secondary" style="text-decoration:none;">${t("home.link_memory")}</a>
+      <div class="card-body btn-group">
+        <a href="/workspace/" class="btn-primary btn-link">${t("home.link_workspace")}</a>
+        <a href="#/chat" class="btn-secondary btn-link">${t("home.link_chat")}</a>
+        <a href="#/animas" class="btn-secondary btn-link">${t("home.link_animas")}</a>
+        <a href="#/memory" class="btn-secondary btn-link">${t("home.link_memory")}</a>
       </div>
     </div>
   `;
@@ -252,18 +252,18 @@ async function _loadActivity() {
       const anima = evt.anima || "";
       const summary = getDisplaySummary(evt);
       return `
-        <div style="display:flex; align-items:flex-start; gap:0.5rem; padding:0.4rem 0; border-bottom:1px solid var(--border-color, #eee);">
-          <span style="flex-shrink:0;">${icon}</span>
-          <span style="color:var(--text-secondary, #666); flex-shrink:0; min-width:3rem;">${escapeHtml(ts)}</span>
-          <span style="font-weight:500; flex-shrink:0; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(anima)}</span>
-          <span style="color:var(--text-secondary, #666); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(summary)}</span>
+        <div class="activity-row">
+          <span class="activity-row-icon">${icon}</span>
+          <span class="activity-row-time">${escapeHtml(ts)}</span>
+          <span class="activity-row-anima">${escapeHtml(anima)}</span>
+          <span class="activity-row-summary">${escapeHtml(summary)}</span>
         </div>
       `;
     }).join("");
 
     timeline.innerHTML = `
       <div id="homeActivityEvents">${eventsHtml}</div>
-      <div style="text-align:right;margin-top:0.5rem;"><a href="#/activity" style="color:var(--accent-color,#2563eb);text-decoration:none;font-size:0.85rem;">${t("activity.view_more")}</a></div>
+      <div class="activity-view-more"><a href="#/activity">${t("activity.view_more")}</a></div>
     `;
   } catch (err) {
     timeline.innerHTML = `<div class="loading-placeholder">${t("activity.load_failed")}: ${escapeHtml(err.message)}</div>`;
@@ -340,14 +340,14 @@ function _renderTaskItem(task) {
   const clickAttr = task.source_url
     ? `onclick="window.open('${escapeHtml(task.source_url)}','_blank')"`
     : "";
-  const cursorStyle = task.source_url ? "cursor:pointer;" : "";
+  const clickableClass = task.source_url ? " ext-task-item--clickable" : "";
 
   return `
-    <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border-color,#eee);${cursorStyle}" ${clickAttr} role="link" tabindex="0" aria-label="${escapeHtml(task.title)}">
-      <span style="flex-shrink:0;font-size:1.1rem;" aria-label="${escapeHtml(task.source_type)}">${icon}</span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
-      <span style="flex-shrink:0;font-size:0.7rem;padding:0.15rem 0.4rem;border-radius:4px;background:${statusColor};color:#fff;">${escapeHtml(statusLabel)}</span>
-      <span style="flex-shrink:0;font-size:0.75rem;color:var(--text-secondary,#666);min-width:3.5rem;text-align:right;">${escapeHtml(relTime)}</span>
+    <div class="ext-task-item${clickableClass}" ${clickAttr} role="link" tabindex="0" aria-label="${escapeHtml(task.title)}">
+      <span class="ext-task-icon" aria-label="${escapeHtml(task.source_type)}">${icon}</span>
+      <span class="ext-task-title">${title}</span>
+      <span class="ext-task-status" style="background:${statusColor};">${escapeHtml(statusLabel)}</span>
+      <span class="ext-task-time">${escapeHtml(relTime)}</span>
     </div>
   `;
 }
@@ -382,10 +382,10 @@ async function _loadExternalTasks(forceRefresh = false) {
 
     if (tasks.length === 0) {
       listEl.innerHTML = `
-        <div style="text-align:center;padding:1.5rem 0;color:var(--text-secondary,#666);">
-          <div style="font-size:1.5rem;margin-bottom:0.5rem;">&#x2714;</div>
+        <div class="ext-tasks-empty">
+          <div class="ext-tasks-empty-icon">&#x2714;</div>
           <div>${t("home.ext_empty")}</div>
-          <div style="font-size:0.8rem;margin-top:0.25rem;">${t("home.ext_empty_hint")}</div>
+          <div class="ext-tasks-empty-hint">${t("home.ext_empty_hint")}</div>
         </div>
       `;
       _extTasksRetryCount = 0;
@@ -394,8 +394,8 @@ async function _loadExternalTasks(forceRefresh = false) {
 
     let html = tasks.map(_renderTaskItem).join("");
     if (data.meta?.has_more) {
-      html += `<div style="text-align:right;margin-top:0.5rem;">
-        <a href="#" id="extTasksShowAll" style="color:var(--accent-color,#2563eb);text-decoration:none;font-size:0.85rem;">
+      html += `<div class="activity-view-more">
+        <a href="#" id="extTasksShowAll">
           ${t("home.ext_show_all")}(${totalCount}${t("home.ext_count_suffix")})
         </a>
       </div>`;
@@ -418,10 +418,10 @@ async function _loadExternalTasks(forceRefresh = false) {
       ? t("home.ext_error_persistent")
       : t("home.ext_error");
     listEl.innerHTML = `
-      <div style="text-align:center;padding:1.5rem 0;color:var(--text-secondary,#666);">
-        <div style="font-size:1.5rem;margin-bottom:0.5rem;">&#x26A0;</div>
+      <div class="ext-tasks-empty">
+        <div class="ext-tasks-empty-icon">&#x26A0;</div>
         <div>${errMsg}</div>
-        <button id="extTasksRetryBtn" class="btn-secondary" style="margin-top:0.5rem;font-size:0.85rem;">${t("home.ext_retry")}</button>
+        <button id="extTasksRetryBtn" class="btn-secondary" aria-label="${t("home.ext_retry")}">${t("home.ext_retry")}</button>
       </div>
     `;
     const retryBtn = document.getElementById("extTasksRetryBtn");

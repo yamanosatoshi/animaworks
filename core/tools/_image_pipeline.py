@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.tools._base import logger
+from core.tools._base import ToolConfigError, logger
 from core.tools._image_clients import (
     _CHIBI_PROMPT,
     _DEFAULT_ANIMATIONS,
@@ -258,20 +258,25 @@ class ImageGenPipeline:
                 try:
                     _notify("fullbody", "generating", 0)
                     if self._is_realistic:
-                        if not os.environ.get("FAL_KEY"):
-                            raise RuntimeError("FAL_KEY required for realistic image generation.")
-                        logger.info("Step 1: Generating realistic full-body with Fal Flux Pro …")
-                        client: NovelAIClient | FalTextToImageClient = FalTextToImageClient()
-                    elif os.environ.get("NOVELAI_TOKEN"):
-                        logger.info("Step 1: Generating full-body with NovelAI …")
-                        client = NovelAIClient()
-                    elif os.environ.get("FAL_KEY"):
-                        logger.info(
-                            "Step 1: Generating full-body with Fal Flux Pro (fallback) …",
-                        )
-                        client = FalTextToImageClient()
+                        # Realistic style: try Fal first, then fallback to NovelAI if Fal is missing.
+                        try:
+                            logger.info("Step 1: Generating realistic full-body with Fal Flux Pro …")
+                            client: NovelAIClient | FalTextToImageClient = FalTextToImageClient()
+                        except ToolConfigError:
+                            logger.warning("Fal key missing for realistic mode; falling back to NovelAI")
+                            logger.info("Step 1: Generating realistic full-body with NovelAI …")
+                            client = NovelAIClient()
                     else:
-                        raise RuntimeError("No image generation API key configured. Set NOVELAI_TOKEN or FAL_KEY.")
+                        # Anime style: try NovelAI first, then fallback to Fal.
+                        try:
+                            logger.info("Step 1: Generating full-body with NovelAI …")
+                            client = NovelAIClient()
+                        except ToolConfigError:
+                            logger.warning("NOVELAI key missing; falling back to Fal Flux Pro")
+                            logger.info(
+                                "Step 1: Generating full-body with Fal Flux Pro (fallback) …",
+                            )
+                            client = FalTextToImageClient()
 
                     # ── A: Load style reference for Vibe Transfer ──
                     # Direct vibe_image parameter takes precedence over config

@@ -22,8 +22,8 @@
   /* Text */
   --aw-color-text-primary: #1a1a1a;
   --aw-color-text-secondary: #555;
-  --aw-color-text-muted: #888;
-  --aw-color-text-faint: #999;
+  --aw-color-text-muted: #6b7280;
+  --aw-color-text-faint: #737373;
   --aw-color-text-placeholder: #9ca3af;
   --aw-color-text-link: #374151;
 
@@ -105,6 +105,32 @@
   --aw-avatar-initial-display: none;
   --aw-emoji-display: inline;
   --aw-icon-display: none;
+
+  /* Spacing scale (4px base) */
+  --aw-space-1: 4px;
+  --aw-space-2: 8px;
+  --aw-space-3: 12px;
+  --aw-space-4: 16px;
+  --aw-space-5: 20px;
+  --aw-space-6: 24px;
+  --aw-space-8: 32px;
+  --aw-space-10: 40px;
+  --aw-space-12: 48px;
+
+  /* Type scale */
+  --aw-text-xs: 0.72rem;    /* 10.08px — caption */
+  --aw-text-sm: 0.82rem;    /* 11.48px — auxiliary */
+  --aw-text-base: 0.9rem;   /* 12.6px  — body */
+  --aw-text-md: 1rem;       /* 14px    — section */
+  --aw-text-lg: 1.15rem;    /* 16.1px  — heading small */
+  --aw-text-xl: 1.25rem;    /* 17.5px  — heading */
+  --aw-text-2xl: 1.6rem;    /* 22.4px  — emphasis */
+
+  /* Elevation (box-shadow) */
+  --aw-shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --aw-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --aw-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --aw-shadow-xl: 0 14px 30px rgba(0,0,0,0.18);
 }
 
 /* ── Business Theme ──────────────────────────────────── */

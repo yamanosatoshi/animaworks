@@ -9,9 +9,9 @@ export default function RegisterBasicPage() {
   const [microsoftConnected, setMicrosoftConnected] = useState(true);
 
   return (
-    <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl">
+    <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white/95 backdrop-blur-sm shadow-lg">
       {/* Left Panel */}
-      <div className="flex w-[280px] shrink-0 flex-col bg-[#111111] p-8">
+      <div className="flex w-[280px] shrink-0 flex-col bg-sidebar-bg p-8">
         {/* HiCrew Logo */}
         <div className="mb-12 flex flex-col items-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 border border-white/20">
@@ -26,8 +26,8 @@ export default function RegisterBasicPage() {
 
       {/* Right Panel */}
       <div className="flex flex-1 flex-col p-8">
-        <h1 className="text-2xl font-bold text-gray-900">基本情報登録</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-text-primary">基本情報登録</h1>
+        <p className="mt-1 text-sm text-text-muted">
           アカウントの表示名やメールアドレスを管理します。
         </p>
 
@@ -36,7 +36,7 @@ export default function RegisterBasicPage() {
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="username"
-              className="text-sm font-medium text-gray-700"
+              className="text-sm font-medium text-text-secondary"
             >
               ユーザー名
             </label>
@@ -45,7 +45,7 @@ export default function RegisterBasicPage() {
               name="username"
               type="text"
               placeholder="Taro Yamada"
-              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
 
@@ -53,7 +53,7 @@ export default function RegisterBasicPage() {
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="orgName"
-              className="text-sm font-medium text-gray-700"
+              className="text-sm font-medium text-text-secondary"
             >
               組織名・チーム名
             </label>
@@ -62,13 +62,13 @@ export default function RegisterBasicPage() {
               name="orgName"
               type="text"
               placeholder="例）株式会社〇〇〇〇マーケティング部"
-              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
 
           {/* メール接続 */}
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-text-secondary">
               メール接続
             </label>
             <p className="text-xs text-gray-400">
@@ -100,7 +100,7 @@ export default function RegisterBasicPage() {
                 />
               </svg>
               <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-sm font-medium text-text-primary">
                   Google Workspace (Gmail)
                 </span>
                 {googleConnected ? (
@@ -143,7 +143,7 @@ export default function RegisterBasicPage() {
                 <path fill="#ffba08" d="M12 12h10v10H12z" />
               </svg>
               <div className="flex flex-1 flex-col">
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-sm font-medium text-text-primary">
                   Microsoft 365 (Outlook)
                 </span>
                 {microsoftConnected ? (

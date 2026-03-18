@@ -11,8 +11,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 2px solid var(--border-color, #ccc);
-  background: var(--bg-secondary, #f5f5f5);
+  border: 2px solid var(--aw-color-border-dark, #ccc);
+  background: var(--aw-color-bg-secondary, #f5f5f5);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -28,19 +28,19 @@
 .voice-mic-btn svg {
   width: 18px;
   height: 18px;
-  fill: var(--text-secondary, #666);
+  fill: var(--aw-color-text-secondary, #666);
   pointer-events: none;
 }
 .voice-mic-btn:hover {
-  border-color: var(--accent-color, #4a9eff);
-  background: var(--bg-hover, #eef);
+  border-color: var(--aw-color-accent, #4a9eff);
+  background: var(--aw-color-bg-hover, #eef);
 }
 .voice-mic-btn.active {
-  border-color: var(--accent-color, #4a9eff);
-  background: var(--accent-bg, #e8f0fe);
+  border-color: var(--aw-color-accent, #4a9eff);
+  background: var(--aw-color-accent-bg, #e8f0fe);
 }
 .voice-mic-btn.active svg {
-  fill: var(--accent-color, #4a9eff);
+  fill: var(--aw-color-accent, #4a9eff);
 }
 .voice-mic-btn.recording {
   border-color: #e53e3e;
@@ -86,7 +86,7 @@
   justify-content: center;
 }
 .voice-tts-indicator::after {
-  content: '🔊';
+  content: '\1F50A';
   font-size: 14px;
   animation: voice-speak 0.8s ease-in-out infinite alternate;
 }
@@ -101,7 +101,7 @@
 
 .voice-thinking-indicator {
   font-size: 11px;
-  color: var(--accent-color, #4a9eff);
+  color: var(--aw-color-accent, #4a9eff);
   animation: voice-thinking-pulse 1.2s ease-in-out infinite;
   flex-shrink: 0;
   white-space: nowrap;
@@ -115,15 +115,15 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 10px;
-  border: 1px solid var(--border-color, #ccc);
-  background: var(--bg-secondary, #f5f5f5);
+  border: 1px solid var(--aw-color-border-dark, #ccc);
+  background: var(--aw-color-bg-secondary, #f5f5f5);
   cursor: pointer;
-  color: var(--text-secondary, #666);
+  color: var(--aw-color-text-secondary, #666);
   transition: all 0.2s;
   flex-shrink: 0;
 }
 .voice-mode-toggle:hover {
-  border-color: var(--accent-color, #4a9eff);
+  border-color: var(--aw-color-accent, #4a9eff);
 }
 
 .voice-volume-slider {
@@ -131,7 +131,7 @@
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: var(--border-color, #ccc);
+  background: var(--aw-color-border-dark, #ccc);
   border-radius: 2px;
   outline: none;
   flex-shrink: 0;
@@ -141,7 +141,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--accent-color, #4a9eff);
+  background: var(--aw-color-accent, #4a9eff);
   cursor: pointer;
 }
 
@@ -154,7 +154,7 @@
   gap: 10px;
   padding: 5px 10px;
   border-radius: 8px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--aw-color-bg-secondary, #f5f5f5);
   font-size: 0.78rem;
   animation: voice-toolbar-in 0.2s ease-out;
 }
@@ -201,27 +201,5 @@
     min-height: 28px;
     padding: 4px 10px;
     font-size: 11px;
-  }
-}
-
-/* ── Dark mode ──────────────────────────── */
-@media (prefers-color-scheme: dark) {
-  .voice-mic-btn {
-    background: var(--bg-secondary, #2d2d2d);
-    border-color: var(--border-color, #444);
-  }
-  .voice-mic-btn svg {
-    fill: var(--text-secondary, #aaa);
-  }
-  .voice-mic-btn.recording {
-    background: #4a1919;
-    border-color: #e53e3e;
-  }
-  .voice-mode-toggle {
-    background: var(--bg-secondary, #2d2d2d);
-    color: var(--text-secondary, #aaa);
-  }
-  .voice-toolbar {
-    background: var(--bg-secondary, #2d2d2d);
   }
 }

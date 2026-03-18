@@ -1,82 +1,28 @@
 "use client";
 
-import React, { useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type PlanId = "basic" | "pro" | "enterprise";
+export interface Plan {
+  id: string;
+  name: string;
+  price: number;
+  priceLabel?: string;
+  description?: string;
+  badge?: string;
+  features: string[];
+}
 
 interface PlanChangeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentPlan: PlanId;
+  onConfirm: (plan: Plan) => void;
+  plans: Plan[];
+  currentPlanId: string;
 }
-
-interface Plan {
-  id: PlanId;
-  name: string;
-  price: string;
-  priceNote: string;
-  description: string;
-  features: string[];
-  recommended: boolean;
-  badge?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Plan data
-// ---------------------------------------------------------------------------
-
-const plans: Plan[] = [
-  {
-    id: "basic",
-    name: "Basic",
-    price: "¥0",
-    priceNote: "/ 月（無料）",
-    description: "個人での試用に最適",
-    features: [
-      "月5回までの利用",
-      "基本機能すべて利用可",
-      "1GBストレージ",
-      "メールサポート",
-    ],
-    recommended: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "¥2,980",
-    priceNote: "/ 月（税込）",
-    description: "個人・小チームの本格利用に",
-    features: [
-      "無制限の利用",
-      "全機能利用可",
-      "20GBストレージ",
-      "優先メールサポート",
-      "データエクスポート",
-    ],
-    recommended: true,
-    badge: "おすすめ",
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "¥9,800",
-    priceNote: "/ 月（税込）",
-    description: "チーム・企業向けの高機能プラン",
-    features: [
-      "無制限の利用",
-      "全機能 + 優先新機能",
-      "無制限ストレージ",
-      "電話・チャットサポート",
-      "チームメンバー管理",
-      "SSO対応",
-    ],
-    recommended: false,
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -117,16 +63,42 @@ const CheckIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+const CheckCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    className={className}
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+    />
+  </svg>
+);
+
 // ---------------------------------------------------------------------------
-// Component
+// Helpers
 // ---------------------------------------------------------------------------
 
-export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
-  isOpen,
-  onClose,
-  currentPlan,
-}) => {
-  // Esc key handler
+function formatPrice(price: number): string {
+  if (price === 0) return "¥0";
+  return `¥${price.toLocaleString("ja-JP")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Inner content (mounts/unmounts with modal — state resets naturally)
+// ---------------------------------------------------------------------------
+
+const PlanChangeModalContent: React.FC<
+  Omit<PlanChangeModalProps, "isOpen">
+> = ({ onClose, onConfirm, plans, currentPlanId }) => {
+  const [selectedPlanId, setSelectedPlanId] = useState<string>(currentPlanId);
+
+  // ESC key handler
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -136,48 +108,53 @@ export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
     [onClose],
   );
 
+  // Keyboard listener + body scroll lock
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      // Prevent body scroll while modal is open
-      document.body.style.overflow = "hidden";
-    }
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
     };
-  }, [isOpen, handleKeyDown]);
+  }, [handleKeyDown]);
 
-  if (!isOpen) return null;
+  const isUnchanged = selectedPlanId === currentPlanId;
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId);
+
+  const handleConfirm = () => {
+    if (selectedPlan && !isUnchanged) {
+      onConfirm(selectedPlan);
+    }
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-[fadeIn_200ms_ease-out]"
       role="dialog"
       aria-modal="true"
       aria-label="プラン変更"
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal panel */}
-      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-white/[0.08] bg-[#12121e] p-6 shadow-2xl sm:p-8">
+      <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-xl sm:p-8 animate-[slideUp_250ms_ease-out]">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">プランを変更</h2>
-            <p className="mt-1 text-sm text-[#8a8aa0]">
+            <h2 className="text-xl font-bold text-gray-900">プランを変更</h2>
+            <p className="mt-1 text-sm text-gray-500">
               いつでもアップグレード・ダウングレードできます
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#8a8aa0] transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
             aria-label="閉じる"
           >
             <CloseIcon />
@@ -187,29 +164,34 @@ export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
         {/* Plan cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {plans.map((plan) => {
-            const isCurrent = plan.id === currentPlan;
-            const isRecommended = plan.recommended;
+            const isCurrent = plan.id === currentPlanId;
+            const isSelected = plan.id === selectedPlanId;
 
             return (
-              <div
+              <button
                 key={plan.id}
+                type="button"
+                onClick={() => setSelectedPlanId(plan.id)}
                 className={[
-                  "relative flex flex-col rounded-xl border-2 p-5 transition-all duration-200",
-                  isCurrent
-                    ? "border-[#4a9eff] bg-[#4a9eff]/[0.06] shadow-[0_0_20px_rgba(74,158,255,0.1)]"
-                    : isRecommended
-                      ? "border-[#7c5cfc]/40 bg-[#7c5cfc]/[0.04] hover:border-[#7c5cfc]/60"
-                      : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]",
+                  "relative flex flex-col rounded-xl border-2 p-5 text-left transition-all duration-200 cursor-pointer",
+                  isSelected
+                    ? "border-violet-600 bg-violet-50 shadow-md shadow-violet-100"
+                    : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm",
                 ].join(" ")}
               >
-                {/* Badge: current plan or recommended */}
+                {/* Selected check icon */}
+                {isSelected && (
+                  <CheckCircleIcon className="absolute top-3 right-3 h-5 w-5 text-violet-600" />
+                )}
+
+                {/* Badge: current plan or custom */}
                 {isCurrent && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#4a9eff] px-3 py-0.5 text-xs font-semibold text-white">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-3 py-0.5 text-xs font-semibold text-white">
                     現在のプラン
                   </span>
                 )}
-                {!isCurrent && isRecommended && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-[#4a9eff] to-[#7c5cfc] px-3 py-0.5 text-xs font-semibold text-white">
+                {!isCurrent && plan.badge && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-violet-500 to-purple-500 px-3 py-0.5 text-xs font-semibold text-white">
                     {plan.badge}
                   </span>
                 )}
@@ -219,14 +201,16 @@ export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
                   <p
                     className={[
                       "text-base font-bold",
-                      isCurrent ? "text-[#4a9eff]" : "text-white",
+                      isSelected ? "text-violet-700" : "text-gray-900",
                     ].join(" ")}
                   >
                     {plan.name}
                   </p>
-                  <p className="mt-0.5 text-xs text-[#8a8aa0]">
-                    {plan.description}
-                  </p>
+                  {plan.description && (
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {plan.description}
+                    </p>
+                  )}
                 </div>
 
                 {/* Price */}
@@ -234,59 +218,69 @@ export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
                   <span
                     className={[
                       "text-2xl font-bold",
-                      isCurrent ? "text-[#4a9eff]" : "text-white",
+                      isSelected ? "text-violet-700" : "text-gray-900",
                     ].join(" ")}
                   >
-                    {plan.price}
+                    {plan.priceLabel ?? formatPrice(plan.price)}
                   </span>
-                  <span className="text-xs text-[#8a8aa0]">
-                    {" "}
-                    {plan.priceNote}
-                  </span>
+                  <span className="text-xs text-gray-400"> / 月</span>
                 </div>
 
                 {/* Feature list */}
-                <ul className="mb-5 flex flex-1 flex-col gap-1.5 text-xs text-[#8a8aa0]">
+                <ul className="flex flex-1 flex-col gap-1.5 text-xs text-gray-600">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-1.5">
                       <CheckIcon
                         className={[
                           "mt-0.5 h-3.5 w-3.5 shrink-0",
-                          isCurrent ? "text-[#4a9eff]" : "text-[#7c5cfc]",
+                          isSelected ? "text-violet-600" : "text-gray-400",
                         ].join(" ")}
                       />
                       {feature}
                     </li>
                   ))}
                 </ul>
-
-                {/* Action button */}
-                {isCurrent ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full cursor-default rounded-lg border border-[#4a9eff]/30 bg-[#4a9eff]/10 px-4 py-2.5 text-sm font-medium text-[#4a9eff]"
-                  >
-                    利用中
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={[
-                      "w-full cursor-pointer rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-200",
-                      isRecommended
-                        ? "bg-gradient-to-r from-[#4a9eff] to-[#7c5cfc] text-white shadow-lg shadow-[#4a9eff]/20 hover:shadow-[#4a9eff]/30 hover:brightness-110"
-                        : "border border-white/[0.1] bg-white/[0.04] text-white hover:bg-white/[0.08]",
-                    ].join(" ")}
-                  >
-                    このプランに変更
-                  </button>
-                )}
-              </div>
+              </button>
             );
           })}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 cursor-pointer"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isUnchanged}
+            className={[
+              "rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-200",
+              isUnchanged
+                ? "cursor-not-allowed bg-gray-100 text-gray-400"
+                : "cursor-pointer bg-violet-600 text-white shadow-sm hover:bg-violet-700 hover:shadow-md focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
+            ].join(" ")}
+          >
+            プランを変更する
+          </button>
         </div>
       </div>
     </div>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Wrapper (controls mount/unmount)
+// ---------------------------------------------------------------------------
+
+export const PlanChangeModal: React.FC<PlanChangeModalProps> = ({
+  isOpen,
+  ...rest
+}) => {
+  if (!isOpen) return null;
+  return <PlanChangeModalContent {...rest} />;
 };

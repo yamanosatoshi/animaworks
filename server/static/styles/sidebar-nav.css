@@ -93,6 +93,22 @@
   opacity: 1;
 }
 
+/* ── Section Header (category grouping) ──────── */
+
+.nav-section-header {
+  padding: 16px 20px 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--aw-color-sidebar-section, #94a3b8);
+  user-select: none;
+}
+
+.nav-section-header:first-child {
+  padding-top: 8px;
+}
+
 /* ── Divider ─────────────────────────────────── */
 
 .nav-divider {

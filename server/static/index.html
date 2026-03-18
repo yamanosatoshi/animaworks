@@ -55,102 +55,100 @@
     <!-- Mobile Nav Backdrop -->
     <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
     <!-- Left Sidebar Navigation -->
-    <nav class="sidebar-nav" id="sidebarNav">
+    <nav class="sidebar-nav" id="sidebarNav" role="navigation" aria-label="Main navigation">
       <div class="sidebar-brand">AnimaWorks</div>
-      <ul class="nav-list">
-        <li><a href="#/chat" class="nav-item active" data-route="/chat">
+      <ul class="nav-list" role="menubar">
+        <!-- Main -->
+        <li class="nav-section-header" aria-hidden="true"><span data-i18n="nav.section_main">Main</span></li>
+        <li role="none"><a href="#/chat" class="nav-item active" data-route="/chat" role="menuitem">
           <span class="nav-emoji">&#x1F4AC;</span>
           <i data-lucide="message-circle" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.chat">Chat</span></a></li>
-        <li><a href="#/board" class="nav-item" data-route="/board">
+        <li role="none"><a href="#/board" class="nav-item" data-route="/board" role="menuitem">
           <span class="nav-emoji">&#x1F4CB;</span>
           <i data-lucide="clipboard-list" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.board">Board</span></a></li>
-        <li><a href="#/" class="nav-item" data-route="/">
+        <li role="none"><a href="#/" class="nav-item" data-route="/" role="menuitem">
           <span class="nav-emoji">&#x1F9E9;</span>
           <i data-lucide="layout-dashboard" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.dashboard">Dashboard</span></a></li>
-        <li><a href="#/animas" class="nav-item" data-route="/animas">
+
+        <!-- AI Management -->
+        <li class="nav-section-header" aria-hidden="true"><span data-i18n="nav.section_ai">AI Management</span></li>
+        <li role="none"><a href="#/animas" class="nav-item" data-route="/animas" role="menuitem">
           <span class="nav-emoji">&#x1F338;</span>
           <i data-lucide="bot" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.animas">Characters</span></a></li>
-        <li><a href="#/team-builder" class="nav-item" data-route="/team-builder">
+        <li role="none"><a href="#/team-builder" class="nav-item" data-route="/team-builder" role="menuitem">
           <span class="nav-emoji">&#x1F3D7;</span>
           <i data-lucide="users-round" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.team_builder">Team Builder</span></a></li>
-        <li><a href="#/brainstorm" class="nav-item" data-route="/brainstorm">
+        <li role="none"><a href="#/brainstorm" class="nav-item" data-route="/brainstorm" role="menuitem">
           <span class="nav-emoji">&#x1F4A1;</span>
           <i data-lucide="lightbulb" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.brainstorm">AI Brainstorm</span></a></li>
-        <li class="nav-divider"></li>
-        <li class="nav-more-toggle" id="navMoreToggle">
-          <span class="nav-emoji">&#x22EF;</span>
-          <i data-lucide="more-horizontal" class="nav-lucide"></i>
-          <span class="nav-label">More</span>
-        </li>
-        <li class="nav-more-item" style="display:none"><a href="#/activity" class="nav-item" data-route="/activity">
+
+        <!-- Monitoring -->
+        <li class="nav-section-header" aria-hidden="true"><span data-i18n="nav.section_monitoring">Monitoring</span></li>
+        <li role="none"><a href="#/activity" class="nav-item" data-route="/activity" role="menuitem">
           <span class="nav-emoji">&#x1F4CA;</span>
           <i data-lucide="activity" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.activity">Activity</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/activity-report" class="nav-item" data-route="/activity-report">
+        <li role="none"><a href="#/activity-report" class="nav-item" data-route="/activity-report" role="menuitem">
           <span class="nav-emoji">&#x1F4C8;</span>
           <i data-lucide="bar-chart-2" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.activity_report">Activity Report</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/memory" class="nav-item" data-route="/memory">
-          <span class="nav-emoji">&#x1F4DA;</span>
-          <i data-lucide="brain" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.memory">Memory Browser</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/processes" class="nav-item" data-route="/processes">
+        <li role="none"><a href="#/processes" class="nav-item" data-route="/processes" role="menuitem">
           <span class="nav-emoji">&#x1F4BB;</span>
           <i data-lucide="cpu" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.processes">Process Monitoring</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/server" class="nav-item" data-route="/server">
-          <span class="nav-emoji">&#x1F310;</span>
-          <i data-lucide="globe" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.server">Server</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/logs" class="nav-item" data-route="/logs">
+          <span class="nav-label" data-i18n="nav.processes">Processes</span></a></li>
+        <li role="none"><a href="#/logs" class="nav-item" data-route="/logs" role="menuitem">
           <span class="nav-emoji">&#x1F4C4;</span>
           <i data-lucide="file-text" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.logs">Logs</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/assets" class="nav-item" data-route="/assets">
-          <span class="nav-emoji">&#x1F3A8;</span>
-          <i data-lucide="palette" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.assets">Assets</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/tool-prompts" class="nav-item" data-route="/tool-prompts">
-          <span class="nav-emoji">&#x1F4DD;</span>
-          <i data-lucide="pencil-ruler" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.tool_prompts">Prompt Settings</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/setup" class="nav-item" data-route="/setup">
-          <span class="nav-emoji">&#x1F527;</span>
-          <i data-lucide="wrench" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.setup">Setup</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="#/users" class="nav-item" data-route="/users">
-          <span class="nav-emoji">&#x1F465;</span>
-          <i data-lucide="users" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.users">Users</span></a></li>
-        <li class="nav-more-item" style="display:none"><a href="/workspace/" class="nav-item nav-external" target="_blank">
-          <span class="nav-emoji">&#x1F3AE;</span>
-          <i data-lucide="building-2" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.workspace">Workspace</span></a></li>
       </ul>
       <!-- Settings gear at bottom of sidebar -->
       <div class="sidebar-settings-area">
-        <div class="sidebar-settings-popup" id="sidebarSettingsPopup">
-          <a href="#/settings" class="sidebar-settings-popup-item" data-route="/settings">
+        <div class="sidebar-settings-popup" id="sidebarSettingsPopup" role="menu" aria-label="Settings menu">
+          <a href="#/settings" class="sidebar-settings-popup-item" data-route="/settings" role="menuitem">
             <i data-lucide="sliders-horizontal"></i>
             <span data-i18n="nav.settings">Settings</span>
           </a>
-          <a href="#/activity" class="sidebar-settings-popup-item" data-route="/activity">
-            <i data-lucide="activity"></i>
-            <span data-i18n="nav.activity">Activity</span>
+          <a href="#/memory" class="sidebar-settings-popup-item" data-route="/memory" role="menuitem">
+            <i data-lucide="brain"></i>
+            <span data-i18n="nav.memory">Memory Browser</span>
+          </a>
+          <a href="#/assets" class="sidebar-settings-popup-item" data-route="/assets" role="menuitem">
+            <i data-lucide="palette"></i>
+            <span data-i18n="nav.assets">Assets</span>
+          </a>
+          <a href="#/tool-prompts" class="sidebar-settings-popup-item" data-route="/tool-prompts" role="menuitem">
+            <i data-lucide="pencil-ruler"></i>
+            <span data-i18n="nav.tool_prompts">Prompt Settings</span>
+          </a>
+          <a href="#/server" class="sidebar-settings-popup-item" data-route="/server" role="menuitem">
+            <i data-lucide="globe"></i>
+            <span data-i18n="nav.server">Server</span>
+          </a>
+          <a href="#/setup" class="sidebar-settings-popup-item" data-route="/setup" role="menuitem">
+            <i data-lucide="wrench"></i>
+            <span data-i18n="nav.setup">Setup</span>
+          </a>
+          <a href="#/users" class="sidebar-settings-popup-item" data-route="/users" role="menuitem">
+            <i data-lucide="users"></i>
+            <span data-i18n="nav.users">Users</span>
+          </a>
+          <a href="/workspace/" class="sidebar-settings-popup-item" target="_blank" role="menuitem">
+            <i data-lucide="building-2"></i>
+            <span data-i18n="nav.workspace">Workspace</span>
           </a>
           <div class="sidebar-settings-popup-divider"></div>
-          <button class="sidebar-settings-popup-item" id="sidebarLogoutBtn">
+          <button class="sidebar-settings-popup-item" id="sidebarLogoutBtn" role="menuitem">
             <i data-lucide="log-out"></i>
             <span data-i18n="ws.logout">Log out</span>
           </button>
         </div>
-        <button class="sidebar-settings-btn" id="sidebarSettingsBtn" title="Settings" aria-label="Settings">
+        <button class="sidebar-settings-btn" id="sidebarSettingsBtn" title="Settings" aria-label="Settings" aria-expanded="false" aria-haspopup="true">
           <span class="nav-emoji">&#x2699;&#xFE0F;</span>
           <i data-lucide="settings" class="nav-lucide"></i>
         </button>
@@ -168,29 +166,20 @@
     document.addEventListener('DOMContentLoaded', () => {
       if (window.lucide) lucide.createIcons();
 
-      // ── "More" toggle ──────────────────────────────
-      const navMoreToggle = document.getElementById('navMoreToggle');
-      if (navMoreToggle) {
-        navMoreToggle.addEventListener('click', () => {
-          const isOpen = navMoreToggle.classList.toggle('open');
-          document.querySelectorAll('.nav-more-item').forEach(el => {
-            el.style.display = isOpen ? '' : 'none';
-          });
-        });
-      }
-
       // ── Settings gear popup ────────────────────────
       const settingsBtn = document.getElementById('sidebarSettingsBtn');
       const settingsPopup = document.getElementById('sidebarSettingsPopup');
       if (settingsBtn && settingsPopup) {
         settingsBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          settingsPopup.classList.toggle('open');
+          const isOpen = settingsPopup.classList.toggle('open');
+          settingsBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
           if (window.lucide) lucide.createIcons();
         });
         document.addEventListener('click', (e) => {
           if (!settingsPopup.contains(e.target) && e.target !== settingsBtn) {
             settingsPopup.classList.remove('open');
+            settingsBtn.setAttribute('aria-expanded', 'false');
           }
         });
       }

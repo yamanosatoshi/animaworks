@@ -106,18 +106,21 @@ const channels: Channel[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Filter categories
+// Filter tabs (status-based)
 // ---------------------------------------------------------------------------
 
-const categories = [
-  "すべて",
-  "カウンセリング",
-  "ビジネス",
-  "クリエイティブ",
-  "エンジニアリング",
-  "ライフスタイル",
-  "エンターテイメント",
-] as const;
+type StatusFilter = "すべて" | "オンライン" | "オフライン";
+
+const statusFilters: StatusFilter[] = ["すべて", "オンライン", "オフライン"];
+
+function matchesStatusFilter(
+  status: Channel["status"],
+  filter: StatusFilter,
+): boolean {
+  if (filter === "すべて") return true;
+  if (filter === "オンライン") return status === "online" || status === "busy";
+  return status === "offline";
+}
 
 // ---------------------------------------------------------------------------
 // Status helpers
@@ -247,20 +250,20 @@ const ArrowRightIcon = () => (
 
 export default function ChannelsPage() {
   const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string>("すべて");
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>("すべて");
 
   const filtered = useMemo(() => {
     return channels.filter((ch) => {
-      const matchCategory =
-        activeCategory === "すべて" || ch.category === activeCategory;
+      const matchStatus = matchesStatusFilter(ch.status, activeFilter);
       const matchSearch =
         search === "" ||
         ch.name.toLowerCase().includes(search.toLowerCase()) ||
+        ch.category.toLowerCase().includes(search.toLowerCase()) ||
         ch.description.toLowerCase().includes(search.toLowerCase()) ||
         ch.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-      return matchCategory && matchSearch;
+      return matchStatus && matchSearch;
     });
-  }, [search, activeCategory]);
+  }, [search, activeFilter]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -293,18 +296,18 @@ export default function ChannelsPage() {
 
           {/* Filter tabs */}
           <div className="-mb-px flex gap-1 overflow-x-auto">
-            {categories.map((cat) => (
+            {statusFilters.map((filter) => (
               <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
                 className={[
                   "whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors",
-                  activeCategory === cat
+                  activeFilter === filter
                     ? "border-b-2 border-violet-600 text-violet-700 bg-violet-50/50"
                     : "text-gray-500 hover:text-gray-700 hover:bg-gray-50",
                 ].join(" ")}
               >
-                {cat}
+                {filter}
               </button>
             ))}
           </div>

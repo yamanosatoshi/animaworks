@@ -93,7 +93,7 @@ function onAvatarClick(e) {
  * Update the team summary section with live data.
  */
 function updateTeamSummary() {
-  const { animas } = getState();
+  const { animas, conversationAnima } = getState();
   if (!animas) return;
 
   const activeCount = animas.filter(a => {
@@ -103,6 +103,27 @@ function updateTeamSummary() {
 
   const activeEl = document.getElementById("wsRpActiveCount");
   if (activeEl) activeEl.textContent = `${activeCount} / ${animas.length}`;
+
+  // Update summary avatar with current conversation anima's image
+  if (conversationAnima) {
+    updateSummaryAvatar(conversationAnima);
+  }
+}
+
+async function updateSummaryAvatar(animaName) {
+  const wrap = document.getElementById("wsRpSummaryAvatar");
+  if (!wrap) return;
+
+  try {
+    const url = await resolveCachedAvatar(animaName, bustupCandidates(), "S");
+    if (url) {
+      wrap.innerHTML = `<img src="${url}" alt="${animaName}">`;
+    } else {
+      wrap.textContent = animaName.charAt(0).toUpperCase();
+    }
+  } catch {
+    wrap.textContent = animaName.charAt(0).toUpperCase();
+  }
 }
 
 /**

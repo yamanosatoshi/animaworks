@@ -9,9 +9,9 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 interface CrewMember {
   name: string;
   tag: string;
-  stars: number;
   color: string;
   initial: string;
+  status: string;
 }
 
 interface BoardMember {
@@ -34,6 +34,7 @@ interface ChatMessage {
   senderColor: string;
   content: string;
   timestamp: string;
+  isAI?: boolean;
 }
 
 interface Suggestion {
@@ -47,16 +48,25 @@ interface TaskItem {
   done: boolean;
 }
 
+interface ExpenseDoc {
+  id: string;
+  title: string;
+  type: string;
+  amount: string;
+  date: string;
+  status: "pending" | "approved" | "rejected";
+}
+
 // ---------------------------------------------------------------------------
 // Dummy data
 // ---------------------------------------------------------------------------
 
 const crewMembers: CrewMember[] = [
-  { name: "太郎", tag: "リーダー", stars: 5, color: "bg-violet-400", initial: "太" },
-  { name: "くうら", tag: "営業", stars: 4, color: "bg-pink-400", initial: "く" },
-  { name: "ケンシロウ", tag: "エンジニア", stars: 5, color: "bg-blue-400", initial: "ケ" },
-  { name: "葵", tag: "デザイナー", stars: 4, color: "bg-emerald-400", initial: "葵" },
-  { name: "吉田梅", tag: "マーケ", stars: 3, color: "bg-amber-400", initial: "梅" },
+  { name: "太郎", tag: "リーダー", color: "bg-violet-400", initial: "太", status: "タスクの進捗を確認中です" },
+  { name: "さくら", tag: "営業", color: "bg-pink-400", initial: "さ", status: "見積書を作成しています" },
+  { name: "ケンシロウ", tag: "エンジニア", color: "bg-blue-400", initial: "ケ", status: "コードレビュー対応中" },
+  { name: "葵", tag: "デザイナー", color: "bg-emerald-400", initial: "葵", status: "デザイン修正を進めています" },
+  { name: "吉田梅", tag: "マーケ", color: "bg-amber-400", initial: "梅", status: "SNS投稿を準備中" },
 ];
 
 const boards: Board[] = [
@@ -65,7 +75,7 @@ const boards: Board[] = [
     name: "プロジェクトA組",
     members: [
       { initial: "太", color: "bg-violet-400" },
-      { initial: "く", color: "bg-pink-400" },
+      { initial: "さ", color: "bg-pink-400" },
       { initial: "ケ", color: "bg-blue-400" },
       { initial: "葵", color: "bg-emerald-400" },
     ],
@@ -87,7 +97,7 @@ const boards: Board[] = [
     id: "board-3",
     name: "営業ミーティング",
     members: [
-      { initial: "く", color: "bg-pink-400" },
+      { initial: "さ", color: "bg-pink-400" },
       { initial: "太", color: "bg-violet-400" },
     ],
     lastMessage: "来週の提案資料を確認してください。",
@@ -98,7 +108,7 @@ const boards: Board[] = [
     name: "マーケティング企画",
     members: [
       { initial: "梅", color: "bg-amber-400" },
-      { initial: "く", color: "bg-pink-400" },
+      { initial: "さ", color: "bg-pink-400" },
       { initial: "葵", color: "bg-emerald-400" },
     ],
     lastMessage: "投稿スケジュール作成に取りかかっています。",
@@ -129,8 +139,8 @@ const boardMessages: Record<string, ChatMessage[]> = {
     },
     {
       id: "2",
-      sender: "くうら",
-      senderInitial: "く",
+      sender: "さくら",
+      senderInitial: "さ",
       senderColor: "bg-pink-400",
       content: "おはようございます！見積書の件、先方に確認中です。",
       timestamp: "9:15",
@@ -152,19 +162,20 @@ const boardMessages: Record<string, ChatMessage[]> = {
       timestamp: "9:45",
     },
     {
+      id: "ai-1",
+      sender: "HiCrew AI",
+      senderInitial: "H",
+      senderColor: "bg-accent",
+      content: "進捗としてよく、タスクの残りもスムーズに進められるかと思います。スケジュールに沿っていることを確認しつつ下記ご覧ください。",
+      timestamp: "10:00",
+      isAI: true,
+    },
+    {
       id: "5",
       sender: "太郎",
       senderInitial: "太",
       senderColor: "bg-violet-400",
-      content: "順調ですね。午後にはレビューを入れましょう。くうらさん、見積書の回答が来たら共有お願いします。",
-      timestamp: "10:00",
-    },
-    {
-      id: "6",
-      sender: "くうら",
-      senderInitial: "く",
-      senderColor: "bg-pink-400",
-      content: "承知しました。午前中には回答が届く予定です。",
+      content: "順調ですね。午後にはレビューを入れましょう。さくらさん、見積書の回答が来たら共有お願いします。",
       timestamp: "10:15",
     },
   ],
@@ -189,8 +200,8 @@ const boardMessages: Record<string, ChatMessage[]> = {
   "board-3": [
     {
       id: "1",
-      sender: "くうら",
-      senderInitial: "く",
+      sender: "さくら",
+      senderInitial: "さ",
       senderColor: "bg-pink-400",
       content: "来週の提案資料を確認してください。修正箇所があれば教えてください。",
       timestamp: "昨日",
@@ -220,9 +231,9 @@ const boardMessages: Record<string, ChatMessage[]> = {
 
 const boardSuggestions: Record<string, Suggestion[]> = {
   "board-1": [
-    { id: "s1", text: "タスク管理ボードに未完了タスクが3件あります" },
-    { id: "s2", text: "見積書の承認フローを開始してください" },
-    { id: "s3", text: "午後のレビュー会議のアジェンダを準備しましょう" },
+    { id: "s1", text: "タスクの確認とスムーズな情報共有を心がけましょう" },
+    { id: "s2", text: "タスク管理ボードへ入力する事を確認する" },
+    { id: "s3", text: "問題がなければ次のNoteにアップロードしてください" },
   ],
   "board-2": [
     { id: "s1", text: "モックアップのフィードバック期限は明日です" },
@@ -258,52 +269,44 @@ const boardTasks: Record<string, TaskItem[]> = {
   ],
 };
 
+const expenseDocs: ExpenseDoc[] = [
+  {
+    id: "e1",
+    title: "quotation_legal_240824.pdf",
+    type: "見積書",
+    amount: "¥2,000,000",
+    date: "2024年4月30日",
+    status: "pending",
+  },
+  {
+    id: "e2",
+    title: "expense_report_march.pdf",
+    type: "経費精算",
+    amount: "¥85,400",
+    date: "2024年3月15日",
+    status: "approved",
+  },
+  {
+    id: "e3",
+    title: "invoice_design_02.pdf",
+    type: "請求書",
+    amount: "¥350,000",
+    date: "2024年3月20日",
+    status: "pending",
+  },
+];
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function Stars({ count }: { count: number }) {
-  return (
-    <div className="flex items-center justify-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <svg
-          key={i}
-          className={`h-3.5 w-3.5 ${i < count ? "text-yellow-400" : "text-gray-200"}`}
-          fill="currentColor"
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-        >
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      ))}
-    </div>
-  );
-}
-
-function CrewCard({ member }: { member: CrewMember }) {
-  return (
-    <div className="flex min-w-[140px] flex-col items-center gap-2 rounded-xl border border-gray-200 bg-white p-4 text-center">
-      <div
-        className={`flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white ${member.color}`}
-      >
-        {member.initial}
-      </div>
-      <p className="text-sm font-medium text-gray-900">{member.name}</p>
-      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-        {member.tag}
-      </span>
-      <Stars count={member.stars} />
-    </div>
-  );
-}
-
 function OverlappingAvatars({ members }: { members: BoardMember[] }) {
   return (
-    <div className="flex -space-x-2">
+    <div className="flex -space-x-1.5">
       {members.map((m, i) => (
         <div
           key={i}
-          className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white ${m.color}`}
+          className={`flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[9px] font-bold text-white ${m.color}`}
           style={{ zIndex: members.length - i }}
         >
           {m.initial}
@@ -322,40 +325,43 @@ function BoardList({
   onSelect: (id: string) => void;
 }) {
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h2 className="text-sm font-bold text-gray-900">掲示板</h2>
+    <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-border-default bg-card-bg">
+      <div className="border-b border-border-default px-4 py-3">
+        <h2 className="text-sm font-bold text-text-primary">掲示板</h2>
       </div>
       <nav className="flex-1 overflow-y-auto" aria-label="ボード一覧">
         <ul className="flex flex-col">
-          {boards.map((board) => (
-            <li key={board.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(board.id)}
-                className={[
-                  "flex w-full flex-col gap-2 px-4 py-3 text-left transition-colors",
-                  activeId === board.id
-                    ? "bg-violet-50 border-r-2 border-violet-500"
-                    : "hover:bg-gray-50",
-                ].join(" ")}
-                aria-current={activeId === board.id ? "true" : undefined}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-sm font-semibold text-gray-900">
-                    {board.name}
-                  </span>
-                  <span className="shrink-0 text-[11px] text-gray-400">
-                    {board.lastTime}
-                  </span>
-                </div>
-                <OverlappingAvatars members={board.members} />
-                <p className="truncate text-xs text-gray-500">
-                  {board.lastMessage}
-                </p>
-              </button>
-            </li>
-          ))}
+          {boards.map((board) => {
+            const isActive = activeId === board.id;
+            return (
+              <li key={board.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(board.id)}
+                  className={[
+                    "flex w-full flex-col gap-1.5 px-4 py-3 text-left transition-colors border-l-[3px]",
+                    isActive
+                      ? "bg-violet-50 border-accent"
+                      : "border-transparent hover:bg-gray-50",
+                  ].join(" ")}
+                  aria-current={isActive ? "true" : undefined}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="truncate text-[13px] font-semibold text-text-primary">
+                      {board.name}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-text-disabled">
+                      {board.lastTime}
+                    </span>
+                  </div>
+                  <OverlappingAvatars members={board.members} />
+                  <p className="truncate text-[11px] text-text-muted">
+                    {board.lastMessage}
+                  </p>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </nav>
     </aside>
@@ -366,10 +372,14 @@ function BoardList({
 function ChatArea({
   board,
   messages,
+  suggestions,
+  tasks,
   onSend,
 }: {
   board: Board;
   messages: ChatMessage[];
+  suggestions: Suggestion[];
+  tasks: TaskItem[];
   onSend: (text: string) => void;
 }) {
   const [input, setInput] = useState("");
@@ -405,35 +415,20 @@ function ChatArea({
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
+      <header className="flex items-center justify-between border-b border-border-default bg-card-bg px-5 py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-sm font-bold text-gray-900">{board.name}</h1>
+          <h2 className="text-sm font-bold text-text-primary">
+            プロジェクト名：{board.name}
+          </h2>
           <OverlappingAvatars members={board.members} />
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label="検索"
-          >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label="その他"
-          >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-            </svg>
-          </button>
+        <div className="flex items-center gap-2 text-xs text-text-muted">
+          <span>経費書等：承認待ち</span>
         </div>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 px-6 py-6">
+      <div className="flex-1 overflow-y-auto bg-page-bg px-5 py-5">
         <div className="flex flex-col gap-4">
           {messages.map((msg) => (
             <div key={msg.id} className="flex gap-3">
@@ -444,32 +439,85 @@ function ChatArea({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className={`text-[13px] font-semibold ${msg.isAI ? "text-accent" : "text-text-primary"}`}>
                     {msg.sender}
                   </span>
-                  <span className="text-[11px] text-gray-400">
+                  <span className="text-[11px] text-text-disabled">
                     {msg.timestamp}
                   </span>
                 </div>
-                <p className="mt-1 text-sm leading-relaxed text-gray-700">
+                <p className={`mt-1 text-sm leading-relaxed ${msg.isAI ? "text-accent-dark rounded-lg bg-violet-50 px-3 py-2" : "text-text-secondary"}`}>
                   {msg.content}
                 </p>
               </div>
             </div>
           ))}
+
+          {/* AI Suggestions */}
+          {suggestions.length > 0 && (
+            <div className="mt-2 space-y-1.5">
+              {suggestions.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-start gap-2 rounded-lg bg-violet-50/80 border border-violet-100 px-3 py-2 text-[12px] text-violet-700"
+                >
+                  <svg className="h-4 w-4 shrink-0 mt-0.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5.002 5.002 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>{s.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Task items in chat */}
+          {tasks.length > 0 && (
+            <div className="mt-2 rounded-lg border border-border-default bg-card-bg p-3">
+              <p className="mb-2 text-xs font-semibold text-text-muted">タスク</p>
+              <div className="space-y-1.5">
+                {tasks.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 cursor-pointer">
+                    <span
+                      className={[
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                        t.done
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : "border-gray-300 bg-white",
+                      ].join(" ")}
+                    >
+                      {t.done && (
+                        <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span
+                      className={[
+                        "text-xs",
+                        t.done ? "text-text-disabled line-through" : "text-text-primary",
+                      ].join(" ")}
+                    >
+                      {t.text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Input */}
-      <div className="border-t border-gray-200 bg-white px-6 py-3">
+      {/* Input bar */}
+      <div className="border-t border-border-default bg-card-bg px-5 py-3">
         <div className="flex items-end gap-3">
           <button
             type="button"
-            className="mb-0.5 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="mb-0.5 rounded-lg p-2 text-text-muted transition-colors hover:bg-gray-100 hover:text-text-secondary"
             aria-label="ファイル添付"
           >
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
             </svg>
           </button>
@@ -480,9 +528,9 @@ function ChatArea({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力..."
+              placeholder="意見してください..."
               rows={1}
-              className="w-full resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              className="w-full resize-none rounded-xl border border-border-default bg-page-bg px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20"
               aria-label="メッセージ入力"
             />
           </div>
@@ -494,12 +542,12 @@ function ChatArea({
             className={[
               "mb-0.5 flex h-9 w-9 items-center justify-center rounded-xl transition-colors",
               input.trim()
-                ? "cursor-pointer bg-violet-600 text-white hover:bg-violet-700"
-                : "cursor-not-allowed bg-gray-200 text-gray-400",
+                ? "cursor-pointer bg-accent text-white hover:bg-accent-hover"
+                : "cursor-not-allowed bg-gray-200 text-text-disabled",
             ].join(" ")}
             aria-label="送信"
           >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
             </svg>
           </button>
@@ -509,66 +557,154 @@ function ChatArea({
   );
 }
 
-/** Right panel — Suggestions & Tasks */
-function SidePanel({
-  suggestions,
-  tasks,
+/** Right panel — Expense / Approval documents */
+function ExpensePanel({
+  docs,
+  onDocClick,
 }: {
-  suggestions: Suggestion[];
-  tasks: TaskItem[];
+  docs: ExpenseDoc[];
+  onDocClick: (doc: ExpenseDoc) => void;
 }) {
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-gray-200 bg-white">
-      {/* Suggestions */}
-      <div className="border-b border-gray-100 px-4 py-4">
-        <h3 className="mb-3 text-sm font-bold text-gray-900">
-          提案事項 / 承認待ち
+    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border-default bg-card-bg">
+      <div className="border-b border-border-default px-4 py-3">
+        <h3 className="text-sm font-bold text-text-primary">
+          経費書・承認書 <span className="ml-1 text-text-muted font-normal">{docs.length}件</span>
         </h3>
-        <ul className="space-y-2">
-          {suggestions.map((s) => (
-            <li
-              key={s.id}
-              className="rounded-lg bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-800"
-            >
-              {s.text}
-            </li>
-          ))}
-        </ul>
       </div>
 
-      {/* Tasks */}
-      <div className="px-4 py-4">
-        <h3 className="mb-3 text-sm font-bold text-gray-900">タスク</h3>
-        <ul className="space-y-2">
-          {tasks.map((t) => (
-            <li key={t.id} className="flex items-start gap-2">
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {docs.map((doc) => (
+          <button
+            key={doc.id}
+            type="button"
+            onClick={() => onDocClick(doc)}
+            className="w-full rounded-lg bg-sidebar-bg p-3 text-left transition-colors hover:bg-gray-800"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <svg className="h-4 w-4 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+              <span className="text-[11px] text-white/80 truncate">{doc.title}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-white/50">{doc.type}</span>
+              <span className="text-xs font-semibold text-white">{doc.amount}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] text-white/40">{doc.date}</span>
               <span
                 className={[
-                  "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                  t.done
-                    ? "border-emerald-500 bg-emerald-500 text-white"
-                    : "border-gray-300",
+                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                  doc.status === "pending"
+                    ? "bg-amber-500/20 text-amber-300"
+                    : doc.status === "approved"
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : "bg-red-500/20 text-red-300",
                 ].join(" ")}
               >
-                {t.done && (
-                  <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
+                {doc.status === "pending" ? "承認待ち" : doc.status === "approved" ? "承認済" : "却下"}
               </span>
-              <span
-                className={[
-                  "text-xs leading-relaxed",
-                  t.done ? "text-gray-400 line-through" : "text-gray-700",
-                ].join(" ")}
-              >
-                {t.text}
-              </span>
-            </li>
-          ))}
-        </ul>
+            </div>
+          </button>
+        ))}
       </div>
     </aside>
+  );
+}
+
+/** Approval sub-window modal */
+function ApprovalModal({
+  doc,
+  onClose,
+}: {
+  doc: ExpenseDoc;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      style={{ animation: "fadeIn 0.2s ease-out" }}
+    >
+      <div
+        className="relative mx-4 w-full max-w-lg rounded-2xl bg-card-bg shadow-2xl"
+        style={{ animation: "slideUp 0.25s ease-out" }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border-default px-6 py-4">
+          <h3 className="text-base font-bold text-text-primary">承認書の詳しい詳細</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-gray-100 transition-colors"
+            aria-label="閉じる"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* File info */}
+          <div className="flex items-center gap-3 rounded-lg bg-page-bg p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+              <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-text-primary">{doc.title}</p>
+              <p className="text-xs text-text-muted">{doc.type}</p>
+            </div>
+          </div>
+
+          {/* Details grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-page-bg p-3">
+              <p className="text-[11px] text-text-muted mb-1">金額</p>
+              <p className="text-lg font-bold text-text-primary">{doc.amount}</p>
+            </div>
+            <div className="rounded-lg bg-page-bg p-3">
+              <p className="text-[11px] text-text-muted mb-1">期日</p>
+              <p className="text-sm font-medium text-text-primary">{doc.date}</p>
+            </div>
+          </div>
+
+          {/* AI Analysis */}
+          <div className="rounded-lg bg-violet-50 border border-violet-100 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent">
+                <span className="text-[8px] font-bold text-white">H</span>
+              </div>
+              <span className="text-xs font-semibold text-accent">AI分析結果</span>
+            </div>
+            <p className="text-xs leading-relaxed text-text-secondary">
+              この見積書はWebリニューアルプロジェクトの法務確認用です。金額は予算範囲内で、過去の類似案件と比較して妥当な水準です。承認をお勧めします。
+            </p>
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-end gap-3 border-t border-border-default px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50 transition-colors"
+          >
+            却下する
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+          >
+            承認する
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -579,6 +715,7 @@ function SidePanel({
 export default function ChatPage() {
   const [activeBoardId, setActiveBoardId] = useState("board-1");
   const [messagesMap, setMessagesMap] = useState(boardMessages);
+  const [selectedDoc, setSelectedDoc] = useState<ExpenseDoc | null>(null);
 
   const activeBoard = boards.find((b) => b.id === activeBoardId) ?? boards[0];
   const activeMessages = messagesMap[activeBoardId] ?? [];
@@ -604,20 +741,38 @@ export default function ChatPage() {
         [activeBoardId]: [...(prev[activeBoardId] ?? []), newMsg],
       }));
     },
-    [activeBoardId]
+    [activeBoardId],
   );
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top section: Header + Crew cards */}
-      <div className="border-b border-gray-200 bg-white px-6 pt-4 pb-4">
-        <h1 className="mb-4 text-lg font-bold text-gray-900">ホーム</h1>
+      {/* Top section: Header + Crew cards with speech bubbles */}
+      <div className="border-b border-border-default bg-card-bg px-5 pt-4 pb-3">
+        <h1 className="mb-3 text-lg font-bold text-text-primary">ホーム</h1>
 
-        {/* Crew member cards — horizontal scroll */}
-        <div className="overflow-x-auto pb-2">
-          <div className="flex gap-4">
+        {/* Crew member cards — horizontal scroll with status bubbles */}
+        <div className="overflow-x-auto pb-1">
+          <div className="flex gap-3">
             {crewMembers.map((member) => (
-              <CrewCard key={member.name} member={member} />
+              <div key={member.name} className="flex items-start gap-2 min-w-[220px]">
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${member.color}`}
+                  >
+                    {member.initial}
+                  </div>
+                  {/* Online dot */}
+                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
+                </div>
+                {/* Speech bubble */}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold text-text-primary">{member.name}・{member.tag}</p>
+                  <div className="mt-1 rounded-lg rounded-tl-none bg-page-bg border border-border-default px-2.5 py-1.5">
+                    <p className="text-[11px] text-text-muted leading-relaxed">{member.status}</p>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -625,7 +780,7 @@ export default function ChatPage() {
         {/* New chat button */}
         <button
           type="button"
-          className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          className="mt-3 rounded-lg bg-sidebar-bg px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
         >
           チャットを新規作成
         </button>
@@ -640,12 +795,19 @@ export default function ChatPage() {
         <ChatArea
           board={activeBoard}
           messages={activeMessages}
+          suggestions={activeSuggestions}
+          tasks={activeTasks}
           onSend={handleSend}
         />
 
-        {/* Right — Suggestions & Tasks */}
-        <SidePanel suggestions={activeSuggestions} tasks={activeTasks} />
+        {/* Right — Expense / Approval documents */}
+        <ExpensePanel docs={expenseDocs} onDocClick={setSelectedDoc} />
       </div>
+
+      {/* Approval modal */}
+      {selectedDoc && (
+        <ApprovalModal doc={selectedDoc} onClose={() => setSelectedDoc(null)} />
+      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@ export default function AuthLayout({
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4 py-12"
-      style={{ background: "linear-gradient(135deg, #E8EEFF 0%, #F5E8FF 50%, #FFE8F5 100%)" }}
+      style={{ background: "var(--auth-bg-gradient)" }}
     >
       {children}
     </div>
