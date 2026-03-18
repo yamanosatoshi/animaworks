@@ -129,7 +129,7 @@ export default function PrivacySettingsPage() {
           </div>
           <div className="p-6">
             <p className="mb-4 text-sm text-gray-600">
-              KONに保存されているあなたのデータをダウンロードできます。エクスポートにはJSON形式とCSV形式が選択できます。
+              HiCrewに保存されているあなたのデータをダウンロードできます。エクスポートにはJSON形式とCSV形式が選択できます。
             </p>
             <Button variant="secondary" size="sm" type="button">
               <svg className="mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">

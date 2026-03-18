@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 export const metadata = {
-  title: "メール送信完了 | KON",
+  title: "メール送信完了 | HiCrew",
   description: "パスワードリセットメールを送信しました",
 };
 

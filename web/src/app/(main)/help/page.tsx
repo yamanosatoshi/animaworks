@@ -2,8 +2,8 @@ import React from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "ヘルプセンター | KON",
-  description: "KONのヘルプセンター。よくある質問・使い方ガイド・お問い合わせ",
+  title: "ヘルプセンター | HiCrew",
+  description: "HiCrewのヘルプセンター。よくある質問・使い方ガイド・お問い合わせ",
 };
 
 /* ---------- icon components ---------- */

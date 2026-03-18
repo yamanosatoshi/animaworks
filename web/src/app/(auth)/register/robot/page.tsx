@@ -3,7 +3,7 @@ import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 export const metadata = {
-  title: "コピーロボット作成 | KON",
+  title: "コピーロボット作成 | HiCrew",
   description: "AIコピーロボットの設定を行います",
 };
 

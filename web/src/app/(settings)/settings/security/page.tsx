@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "セキュリティ設定 | KON",
+  title: "セキュリティ設定 | HiCrew",
   description: "パスワードと2段階認証を管理します",
 };
 

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "パスワードリセット | KON",
+  title: "パスワードリセット | HiCrew",
   description: "パスワードのリセットを行います",
 };
 

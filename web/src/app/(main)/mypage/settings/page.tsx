@@ -30,7 +30,7 @@ const initialNotificationSettings: ToggleSetting[] = [
 ];
 
 const initialApiSettings = {
-  apiKey: "kon_sk_xxxxxxxxxxxx...xxxx",
+  apiKey: "hicrew_sk_xxxxxxxxxxxx...xxxx",
   webhookUrl: "",
 };
 

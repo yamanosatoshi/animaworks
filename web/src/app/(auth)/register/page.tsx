@@ -3,8 +3,8 @@ import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 export const metadata = {
-  title: "会員登録 | KON",
-  description: "KONへの会員登録シナリオを選択してください",
+  title: "会員登録 | HiCrew",
+  description: "HiCrewへの会員登録シナリオを選択してください",
 };
 
 const scenarios = [
@@ -16,7 +16,7 @@ const scenarios = [
       </svg>
     ),
     title: "個人で利用する",
-    description: "個人でKONの機能を試したい方向け。後からチームに招待することもできます。",
+    description: "個人でHiCrewの機能を試したい方向け。後からチームに招待することもできます。",
     href: "/register/basic",
   },
   {
@@ -56,9 +56,9 @@ export default function RegisterPage() {
         {/* Hero */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4a9eff] to-[#7c5cfc] shadow-lg shadow-[#4a9eff]/20">
-            <span className="text-lg font-bold text-white">KON</span>
+            <span className="text-lg font-bold text-white">HiCrew</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">KONへようこそ</h1>
+          <h1 className="text-2xl font-bold text-white">HiCrewへようこそ</h1>
           <p className="mt-2 text-sm text-[#8a8aa0]">
             利用シナリオを選択して、登録を始めましょう
           </p>

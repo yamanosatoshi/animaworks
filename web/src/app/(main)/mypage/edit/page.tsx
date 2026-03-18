@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "プロフィール編集 | KON",
+  title: "プロフィール編集 | HiCrew",
   description: "プロフィール情報を編集します",
 };
 
@@ -89,7 +89,7 @@ export default function MyPageEditPage() {
                 id="bio"
                 name="bio"
                 rows={4}
-                defaultValue="UI/UXデザインとフロントエンド開発が好きです。KONを使ってもっと快適な作業環境を作りたいと思っています。"
+                defaultValue="UI/UXデザインとフロントエンド開発が好きです。HiCrewを使ってもっと快適な作業環境を作りたいと思っています。"
                 className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 transition-colors duration-150 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
                 placeholder="自己紹介を入力..."
               />

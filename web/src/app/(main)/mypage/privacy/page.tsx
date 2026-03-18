@@ -108,7 +108,7 @@ export default function PrivacySettingsPage() {
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-white">データのエクスポート</h3>
                   <p className="mt-0.5 text-xs text-[#8a8aa0]">
-                    KONに保存されているあなたのデータをJSON形式またはCSV形式でダウンロードできます。
+                    HiCrewに保存されているあなたのデータをJSON形式またはCSV形式でダウンロードできます。
                   </p>
                 </div>
                 <button

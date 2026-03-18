@@ -3,7 +3,7 @@ import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 export const metadata = {
-  title: "メンバー作成 | KON",
+  title: "メンバー作成 | HiCrew",
   description: "チーム設定を行います",
 };
 
@@ -44,7 +44,7 @@ export default function RegisterMemberPage() {
               チームURL <span className="text-[#4a9eff]" aria-label="必須">*</span>
             </label>
             <div className="flex items-center rounded-lg border border-white/[0.06] bg-white/[0.04] transition-colors duration-150 focus-within:ring-2 focus-within:ring-[#4a9eff] focus-within:border-transparent hover:border-white/[0.12]">
-              <span className="shrink-0 pl-3.5 text-sm text-[#8a8aa0]">kon.app/</span>
+              <span className="shrink-0 pl-3.5 text-sm text-[#8a8aa0]">hicrew.app/</span>
               <input
                 id="teamSlug"
                 name="teamSlug"

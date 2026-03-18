@@ -49,13 +49,14 @@ interface TaskItem {
   done: boolean;
 }
 
-interface ExpenseDoc {
+interface ApprovalDoc {
   id: string;
   title: string;
   type: string;
   amount: string;
   date: string;
   status: "pending" | "approved" | "rejected";
+  aiComment: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +271,7 @@ const boardTasks: Record<string, TaskItem[]> = {
   ],
 };
 
-const expenseDocs: ExpenseDoc[] = [
+const approvalDocs: ApprovalDoc[] = [
   {
     id: "e1",
     title: "quotation_legal_240824.pdf",
@@ -278,6 +279,7 @@ const expenseDocs: ExpenseDoc[] = [
     amount: "¥2,000,000",
     date: "2024年4月30日",
     status: "pending",
+    aiComment: "この見積書はWebリニューアルプロジェクトの法務確認用です。金額は予算範囲内で、過去の類似案件と比較して妥当な水準です。承認をお勧めします。",
   },
   {
     id: "e2",
@@ -286,6 +288,7 @@ const expenseDocs: ExpenseDoc[] = [
     amount: "¥85,400",
     date: "2024年3月15日",
     status: "approved",
+    aiComment: "経費精算書の内容は規定に沿っています。",
   },
   {
     id: "e3",
@@ -294,6 +297,7 @@ const expenseDocs: ExpenseDoc[] = [
     amount: "¥350,000",
     date: "2024年3月20日",
     status: "pending",
+    aiComment: "デザイン制作の請求書です。契約金額と一致しており、問題ありません。",
   },
 ];
 
@@ -558,96 +562,39 @@ function ChatArea({
   );
 }
 
-/** Right panel — Expense / Approval documents */
-function ExpensePanel({
+/** Right panel — Approval / Suggestions panel (per design: hicrew_chat_subwindow.png) */
+function ApprovalPanel({
   docs,
+  selectedDoc,
   onDocClick,
-}: {
-  docs: ExpenseDoc[];
-  onDocClick: (doc: ExpenseDoc) => void;
-}) {
-  return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border-default bg-card-bg">
-      <div className="border-b border-border-default px-4 py-3">
-        <h3 className="text-sm font-bold text-text-primary">
-          経費書・承認書 <span className="ml-1 text-text-muted font-normal">{docs.length}件</span>
-        </h3>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {docs.map((doc) => (
-          <button
-            key={doc.id}
-            type="button"
-            onClick={() => onDocClick(doc)}
-            className="w-full rounded-lg bg-sidebar-bg p-3 text-left transition-colors hover:bg-gray-800"
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <svg className="h-4 w-4 text-white/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-              <span className="text-[11px] text-white/80 truncate">{doc.title}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-white/50">{doc.type}</span>
-              <span className="text-xs font-semibold text-white">{doc.amount}</span>
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[10px] text-white/40">{doc.date}</span>
-              <span
-                className={[
-                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                  doc.status === "pending"
-                    ? "bg-amber-500/20 text-amber-300"
-                    : doc.status === "approved"
-                      ? "bg-emerald-500/20 text-emerald-300"
-                      : "bg-red-500/20 text-red-300",
-                ].join(" ")}
-              >
-                {doc.status === "pending" ? "承認待ち" : doc.status === "approved" ? "承認済" : "却下"}
-              </span>
-            </div>
-          </button>
-        ))}
-      </div>
-    </aside>
-  );
-}
-
-/** Approval sub-window modal */
-function ApprovalModal({
-  doc,
   onClose,
 }: {
-  doc: ExpenseDoc;
+  docs: ApprovalDoc[];
+  selectedDoc: ApprovalDoc | null;
+  onDocClick: (doc: ApprovalDoc) => void;
   onClose: () => void;
 }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      style={{ animation: "fadeIn 0.2s ease-out" }}
-    >
-      <div
-        className="relative mx-4 w-full max-w-lg rounded-2xl bg-card-bg shadow-2xl"
-        style={{ animation: "slideUp 0.25s ease-out" }}
-      >
+  if (selectedDoc) {
+    // Detail view — right fixed split panel (not a centered modal)
+    return (
+      <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-border-default bg-card-bg">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border-default px-6 py-4">
-          <h3 className="text-base font-bold text-text-primary">承認書の詳しい詳細</h3>
+        <div className="flex items-center justify-between border-b border-border-default px-5 py-3">
+          <h3 className="text-sm font-bold text-text-primary">承認書の詳しい詳細</h3>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-muted hover:bg-gray-100 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-text-muted hover:bg-gray-100 transition-colors"
             aria-label="閉じる"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* File info */}
           <div className="flex items-center gap-3 rounded-lg bg-page-bg p-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
@@ -656,20 +603,20 @@ function ApprovalModal({
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-text-primary">{doc.title}</p>
-              <p className="text-xs text-text-muted">{doc.type}</p>
+              <p className="text-sm font-medium text-text-primary">{selectedDoc.title}</p>
+              <p className="text-xs text-text-muted">{selectedDoc.type}</p>
             </div>
           </div>
 
-          {/* Details grid */}
+          {/* Details */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg bg-page-bg p-3">
               <p className="text-[11px] text-text-muted mb-1">金額</p>
-              <p className="text-lg font-bold text-text-primary">{doc.amount}</p>
+              <p className="text-lg font-bold text-text-primary">{selectedDoc.amount}</p>
             </div>
             <div className="rounded-lg bg-page-bg p-3">
               <p className="text-[11px] text-text-muted mb-1">期日</p>
-              <p className="text-sm font-medium text-text-primary">{doc.date}</p>
+              <p className="text-sm font-medium text-text-primary">{selectedDoc.date}</p>
             </div>
           </div>
 
@@ -682,13 +629,13 @@ function ApprovalModal({
               <span className="text-xs font-semibold text-accent">AI分析結果</span>
             </div>
             <p className="text-xs leading-relaxed text-text-secondary">
-              この見積書はWebリニューアルプロジェクトの法務確認用です。金額は予算範囲内で、過去の類似案件と比較して妥当な水準です。承認をお勧めします。
+              {selectedDoc.aiComment}
             </p>
           </div>
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-end gap-3 border-t border-border-default px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border-default px-5 py-3">
           <button
             type="button"
             onClick={onClose}
@@ -704,8 +651,56 @@ function ApprovalModal({
             承認する
           </button>
         </div>
+      </aside>
+    );
+  }
+
+  // List view — pending approvals
+  return (
+    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border-default bg-card-bg">
+      <div className="border-b border-border-default px-4 py-3">
+        <h3 className="text-sm font-bold text-text-primary">
+          経費書等：承認待ち <span className="ml-1 text-text-muted font-normal">{docs.filter(d => d.status === "pending").length}件</span>
+        </h3>
       </div>
-    </div>
+
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {docs.map((doc) => (
+          <button
+            key={doc.id}
+            type="button"
+            onClick={() => onDocClick(doc)}
+            className="w-full rounded-lg border border-border-default bg-white p-3 text-left transition-colors hover:bg-gray-50 hover:border-accent/30"
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <svg className="h-4 w-4 text-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+              </svg>
+              <span className="text-[11px] text-text-primary truncate">{doc.title}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-muted">{doc.type}</span>
+              <span className="text-xs font-semibold text-text-primary">{doc.amount}</span>
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px] text-text-disabled">{doc.date}</span>
+              <span
+                className={[
+                  "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
+                  doc.status === "pending"
+                    ? "bg-amber-50 text-amber-600 border border-amber-200"
+                    : doc.status === "approved"
+                      ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                      : "bg-red-50 text-red-600 border border-red-200",
+                ].join(" ")}
+              >
+                {doc.status === "pending" ? "承認待ち" : doc.status === "approved" ? "承認済" : "却下"}
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -716,7 +711,7 @@ function ApprovalModal({
 export default function ChatPage() {
   const [activeBoardId, setActiveBoardId] = useState("board-1");
   const [messagesMap, setMessagesMap] = useState(boardMessages);
-  const [selectedDoc, setSelectedDoc] = useState<ExpenseDoc | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<ApprovalDoc | null>(null);
 
   const activeBoard = boards.find((b) => b.id === activeBoardId) ?? boards[0];
   const activeMessages = messagesMap[activeBoardId] ?? [];
@@ -781,7 +776,7 @@ export default function ChatPage() {
         {/* New chat button */}
         <button
           type="button"
-          className="mt-3 rounded-lg bg-sidebar-bg px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          className="mt-3 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
         >
           チャットを新規作成
         </button>
@@ -801,14 +796,14 @@ export default function ChatPage() {
           onSend={handleSend}
         />
 
-        {/* Right — Expense / Approval documents */}
-        <ExpensePanel docs={expenseDocs} onDocClick={setSelectedDoc} />
+        {/* Right — Approval panel (right-fixed split, not modal) */}
+        <ApprovalPanel
+          docs={approvalDocs}
+          selectedDoc={selectedDoc}
+          onDocClick={setSelectedDoc}
+          onClose={() => setSelectedDoc(null)}
+        />
       </div>
-
-      {/* Approval modal */}
-      {selectedDoc && (
-        <ApprovalModal doc={selectedDoc} onClose={() => setSelectedDoc(null)} />
-      )}
     </div>
   );
 }

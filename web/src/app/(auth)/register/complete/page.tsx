@@ -3,7 +3,7 @@ import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 export const metadata = {
-  title: "設定完了 | KON",
+  title: "設定完了 | HiCrew",
   description: "アカウントの設定が完了しました",
 };
 
@@ -41,7 +41,7 @@ export default function RegisterCompletePage() {
 
           <h1 className="text-2xl font-bold text-white">設定が完了しました！</h1>
           <p className="mt-3 text-sm text-[#8a8aa0] leading-relaxed">
-            KONへようこそ。
+            HiCrewへようこそ。
             <br />
             すべての設定が完了しました。
             <br />

@@ -2,8 +2,8 @@ import React from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "プライバシーポリシー | KON",
-  description: "KONのプライバシーポリシー",
+  title: "プライバシーポリシー | HiCrew",
+  description: "HiCrewのプライバシーポリシー",
 };
 
 interface PolicySection {
@@ -133,7 +133,7 @@ export default function PrivacyPage() {
       {/* Intro */}
       <div className="mb-8 rounded-2xl bg-violet-50 border border-violet-100 p-5">
         <p className="text-sm leading-relaxed text-violet-800">
-          KON（以下「当社」）は、利用者の個人情報の保護を重要視しています。本プライバシーポリシーは、当社が収集・利用・管理する個人情報の取り扱いについて説明します。
+          HiCrew（以下「当社」）は、利用者の個人情報の保護を重要視しています。本プライバシーポリシーは、当社が収集・利用・管理する個人情報の取り扱いについて説明します。
         </p>
       </div>
 
@@ -203,7 +203,7 @@ export default function PrivacyPage() {
           <p className="text-xs text-gray-500">
             個人情報の取り扱いに関するお問い合わせ先
           </p>
-          <p className="text-xs text-gray-400">KON 個人情報取扱窓口</p>
+          <p className="text-xs text-gray-400">HiCrew 個人情報取扱窓口</p>
           <Link
             href="/contact"
             className="mx-auto mt-2 text-sm text-violet-600 hover:text-violet-700 underline"

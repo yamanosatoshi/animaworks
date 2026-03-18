@@ -2,8 +2,8 @@ import React from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "利用規約 | KON",
-  description: "KONサービス利用規約",
+  title: "利用規約 | HiCrew",
+  description: "HiCrewサービス利用規約",
 };
 
 /* ---------- data ---------- */
@@ -19,7 +19,7 @@ const termsSections: TermsSection[] = [
     id: "section-1",
     title: "第1条（適用）",
     content: [
-      "本規約は、KON（以下「当社」）が提供するサービス（以下「本サービス」）の利用に関し、当社と利用者の間に適用されます。",
+      "本規約は、HiCrew（以下「当社」）が提供するサービス（以下「本サービス」）の利用に関し、当社と利用者の間に適用されます。",
       "利用者は、本サービスに登録・利用することにより、本規約に同意したものとみなされます。",
     ],
   },

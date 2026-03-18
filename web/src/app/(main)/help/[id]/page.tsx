@@ -22,7 +22,7 @@ const articleData: Record<string, {
     content: [
       {
         type: "paragraph",
-        text: "KONへの登録は簡単な3ステップで完了します。以下の手順に従って、アカウントを作成してください。",
+        text: "HiCrewへの登録は簡単な3ステップで完了します。以下の手順に従って、アカウントを作成してください。",
       },
       { type: "heading", text: "ステップ1: 登録フォームにアクセス" },
       {
@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: HelpArticlePageProps) {
   const { id } = await params;
   const article = articleData[id];
   return {
-    title: article ? `${article.title} | KON ヘルプ` : "ヘルプ記事 | KON",
+    title: article ? `${article.title} | HiCrew ヘルプ` : "ヘルプ記事 | HiCrew",
     description: article?.content[0]?.text ?? "ヘルプ記事",
   };
 }

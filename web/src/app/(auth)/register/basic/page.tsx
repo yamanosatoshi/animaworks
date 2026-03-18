@@ -11,7 +11,7 @@ export default function RegisterBasicPage() {
   return (
     <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white/95 backdrop-blur-sm shadow-lg">
       {/* Left Panel */}
-      <div className="flex w-[280px] shrink-0 flex-col bg-sidebar-bg p-8">
+      <div className="flex w-[280px] shrink-0 flex-col bg-gray-900 p-8">
         {/* HiCrew Logo */}
         <div className="mb-12 flex flex-col items-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 border border-white/20">

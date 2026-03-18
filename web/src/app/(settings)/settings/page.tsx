@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "設定 | KON",
+  title: "設定 | HiCrew",
   description: "アカウント設定を管理します",
 };
 
@@ -207,7 +207,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Version */}
-        <p className="text-center text-xs text-gray-400">KON v1.0.0</p>
+        <p className="text-center text-xs text-gray-400">HiCrew v1.0.0</p>
       </div>
     </div>
   );

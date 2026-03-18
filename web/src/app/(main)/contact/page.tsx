@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "お問い合わせ | KON",
+  title: "お問い合わせ | HiCrew",
   description: "サポートチームへのお問い合わせ",
 };
 

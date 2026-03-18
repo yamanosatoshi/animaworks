@@ -3,7 +3,7 @@ import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
 
 export const metadata = {
-  title: "登録確認 | KON",
+  title: "登録確認 | HiCrew",
   description: "入力内容を確認してください",
 };
 
@@ -92,7 +92,7 @@ export default function RegisterConfirmPage() {
             <div className="flex flex-col divide-y divide-white/[0.06]">
               {[
                 { label: "チーム名", value: "マイチーム" },
-                { label: "チームURL", value: "kon.app/my-team" },
+                { label: "チームURL", value: "hicrew.app/my-team" },
                 { label: "招待メンバー", value: "2名" },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between px-4 py-2.5">

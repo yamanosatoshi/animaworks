@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 
 export const metadata = {
-  title: "プラン管理 | KON",
+  title: "プラン管理 | HiCrew",
   description: "現在のプランを確認・変更します",
 };
 

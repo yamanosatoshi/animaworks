@@ -56,7 +56,7 @@ export default function ProfileSettingsPage() {
     lastName: "山田",
     firstName: "太郎",
     displayName: "taro",
-    bio: "UI/UXデザインとフロントエンド開発が好きです。KONを使ってもっと快適な作業環境を作りたいと思っています。",
+    bio: "UI/UXデザインとフロントエンド開発が好きです。HiCrewを使ってもっと快適な作業環境を作りたいと思っています。",
     email: "taro@example.com",
     phone: "",
   });

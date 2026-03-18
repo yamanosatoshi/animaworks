@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 
 export const metadata = {
-  title: "マイページ | KON",
+  title: "マイページ | HiCrew",
   description: "プロフィールと利用状況を確認します",
 };
 
@@ -63,7 +63,7 @@ export default function MyPage() {
             <h2 className="text-lg font-bold text-gray-900">山田 太郎</h2>
             <p className="text-sm text-gray-500">@taro</p>
             <p className="mt-2 text-sm text-gray-600 leading-relaxed">
-              UI/UXデザインとフロントエンド開発が好きです。KONを使ってもっと快適な作業環境を作りたいと思っています。
+              UI/UXデザインとフロントエンド開発が好きです。HiCrewを使ってもっと快適な作業環境を作りたいと思っています。
             </p>
           </div>
 

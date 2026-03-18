@@ -13,9 +13,9 @@
   --accent-foreground: #FFFFFF;
 
   /* --- Surfaces --- */
-  --sidebar-bg: #111111;
-  --sidebar-text: #E5E7EB;
-  --sidebar-text-muted: #9CA3AF;
+  --sidebar-bg: #FFFFFF;
+  --sidebar-text: #111827;
+  --sidebar-text-muted: #6B7280;
   --card-bg: #FFFFFF;
   --page-bg: #F9FAFB;
 
@@ -50,9 +50,9 @@
   --color-accent-foreground: #FFFFFF;
 
   /* --- Surfaces --- */
-  --color-sidebar-bg: #111111;
-  --color-sidebar-text: #E5E7EB;
-  --color-sidebar-text-muted: #9CA3AF;
+  --color-sidebar-bg: #FFFFFF;
+  --color-sidebar-text: #111827;
+  --color-sidebar-text-muted: #6B7280;
   --color-card-bg: #FFFFFF;
   --color-page-bg: #F9FAFB;
 

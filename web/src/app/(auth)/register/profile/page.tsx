@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 
 export const metadata = {
-  title: "プロフィール入力 | KON",
+  title: "プロフィール入力 | HiCrew",
   description: "あなたのプロフィールを入力してください",
 };
 

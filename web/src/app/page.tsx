@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "KON — AIコミュニケーション支援サービス",
-  description: "KONは、AIがあなたのコミュニケーションをサポートするサービスです。",
+  title: "HiCrew — AIコミュニケーション支援サービス",
+  description: "HiCrewは、AIがあなたのコミュニケーションをサポートするサービスです。",
 };
 
 const features = [
@@ -43,9 +43,9 @@ export default function LandingPage() {
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600">
-              <span className="text-xs font-bold text-white">KON</span>
+              <span className="text-xs font-bold text-white">HiCrew</span>
             </div>
-            <span className="text-base font-semibold text-gray-900">KON</span>
+            <span className="text-base font-semibold text-gray-900">HiCrew</span>
           </div>
           <nav className="flex items-center gap-3" aria-label="ヘッダーナビゲーション">
             <Link
@@ -92,7 +92,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="mb-10 text-lg leading-relaxed text-gray-600">
-              KONは、AIの力でビジネスコミュニケーションを効率化するサービスです。
+              HiCrewは、AIの力でビジネスコミュニケーションを効率化するサービスです。
               質問への回答、文章作成、情報整理をスマートにサポートします。
             </p>
 
@@ -127,7 +127,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-4xl">
             <div className="mb-12 text-center">
               <h2 id="features-heading" className="text-2xl font-bold text-gray-900 sm:text-3xl">
-                KONでできること
+                HiCrewでできること
               </h2>
               <p className="mt-3 text-gray-600">
                 シンプルなUIで、すぐに使い始めることができます。
@@ -181,7 +181,7 @@ export default function LandingPage() {
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-indigo-600">
               <span className="text-[10px] font-bold text-white">K</span>
             </div>
-            <span className="text-sm font-medium text-gray-700">KON</span>
+            <span className="text-sm font-medium text-gray-700">HiCrew</span>
           </div>
           <nav className="flex gap-6" aria-label="フッターナビゲーション">
             <Link href="/terms" className="text-xs text-gray-500 hover:text-gray-700 transition-colors">
@@ -197,7 +197,7 @@ export default function LandingPage() {
               お問い合わせ
             </Link>
           </nav>
-          <p className="text-xs text-gray-400">© 2026 KON. All rights reserved.</p>
+          <p className="text-xs text-gray-400">© 2026 HiCrew. All rights reserved.</p>
         </div>
       </footer>
     </div>

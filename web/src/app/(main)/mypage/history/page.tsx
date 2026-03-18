@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 
 export const metadata = {
-  title: "利用履歴 | KON",
+  title: "利用履歴 | HiCrew",
   description: "サービスの利用履歴を確認します",
 };
 
