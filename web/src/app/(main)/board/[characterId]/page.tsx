@@ -1,89 +1,72 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ChatMessage, BoardCharacter, LLMProvider } from "@/types/chat";
 import { ChatBoard } from "@/components/chat/ChatBoard";
 
 // ---------------------------------------------------------------------------
-// Dummy characters (shared data — later extract to a data layer)
+// API response types
 // ---------------------------------------------------------------------------
 
-const characters: BoardCharacter[] = [
-  {
-    id: "aoi",
-    name: "葵（あおい）",
-    description: "心に寄り添うカウンセラー。悩みや不安を穏やかに聴きます。",
-    avatar: "葵",
-    avatarColor: "from-violet-400 to-indigo-500",
-    llmProvider: "claude",
-    status: "online",
-    tags: ["メンタルヘルス", "相談"],
-    messageCount: 1240,
-    followerCount: 892,
-  },
-  {
-    id: "ren",
-    name: "蓮（れん）",
-    description: "ビジネス戦略のプロ。事業計画からマーケティングまで。",
-    avatar: "蓮",
-    avatarColor: "from-emerald-400 to-teal-500",
-    llmProvider: "gemini",
-    status: "online",
-    tags: ["経営", "戦略"],
-    messageCount: 980,
-    followerCount: 654,
-  },
-  {
-    id: "hina",
-    name: "陽菜（ひな）",
-    description: "デザインとクリエイティブの専門家。UIからブランディングまで。",
-    avatar: "陽",
-    avatarColor: "from-pink-400 to-rose-500",
-    llmProvider: "openai",
-    status: "busy",
-    tags: ["デザイン", "UI/UX"],
-    messageCount: 756,
-    followerCount: 521,
-  },
-  {
-    id: "sora",
-    name: "空（そら）",
-    description: "フルスタックエンジニア。コードレビューからアーキテクチャ設計まで。",
-    avatar: "空",
-    avatarColor: "from-blue-400 to-cyan-500",
-    llmProvider: "claude",
-    status: "online",
-    tags: ["開発", "技術相談"],
-    messageCount: 2100,
-    followerCount: 1340,
-  },
-  {
-    id: "mio",
-    name: "美桜（みお）",
-    description: "暮らしと健康のアドバイザー。毎日をより豊かに。",
-    avatar: "美",
-    avatarColor: "from-amber-400 to-orange-500",
-    llmProvider: "gemini",
-    status: "offline",
-    tags: ["健康", "生活"],
-    messageCount: 430,
-    followerCount: 312,
-  },
-  {
-    id: "kai",
-    name: "海（かい）",
-    description: "エンタメ通。映画・音楽・ゲーム・トレンドまで幅広く。",
-    avatar: "海",
-    avatarColor: "from-purple-400 to-fuchsia-500",
-    llmProvider: "openai",
-    status: "online",
-    tags: ["趣味", "雑談"],
-    messageCount: 1560,
-    followerCount: 1100,
-  },
-];
+/** Shape returned by GET /api/animas */
+interface AnimaResponse {
+  id: string;
+  name: string;
+  description: string;
+  avatar: string;
+  avatarColor: string;
+  llmProvider: string;
+  status: "online" | "offline" | "busy";
+  tags: string[];
+  messageCount: number;
+  followerCount: number;
+}
+
+/** Shape returned by GET /api/rooms/[id]/messages */
+interface StoredMessageResponse {
+  id: string;
+  roomId: string;
+  senderType: "user" | "ai_host" | "ai_guest";
+  senderName: string;
+  senderAvatar?: string;
+  content: string;
+  llmProvider?: string;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Converters
+// ---------------------------------------------------------------------------
+
+function toCharacter(a: AnimaResponse): BoardCharacter {
+  return {
+    id: a.id,
+    name: a.name,
+    description: a.description,
+    avatar: a.avatar,
+    avatarColor: a.avatarColor,
+    llmProvider: a.llmProvider as LLMProvider,
+    status: a.status,
+    tags: a.tags,
+    messageCount: a.messageCount,
+    followerCount: a.followerCount,
+  };
+}
+
+function toChatMessage(m: StoredMessageResponse): ChatMessage {
+  return {
+    id: m.id,
+    boardId: m.roomId,
+    senderType: m.senderType,
+    senderName: m.senderName,
+    senderAvatar: m.senderAvatar,
+    content: m.content,
+    timestamp: m.createdAt,
+    llmProvider: m.llmProvider as LLMProvider | undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // LLM badge config (for sidebar)
@@ -111,87 +94,6 @@ function statusDot(s: BoardCharacter["status"]): string {
     case "offline":
       return "bg-gray-400";
   }
-}
-
-// ---------------------------------------------------------------------------
-// Dummy messages per board
-// ---------------------------------------------------------------------------
-
-function makeDummyMessages(char: BoardCharacter): ChatMessage[] {
-  const now = new Date();
-  const t = (minAgo: number) =>
-    new Date(now.getTime() - minAgo * 60_000).toISOString();
-
-  const base: ChatMessage[] = [
-    {
-      id: "m1",
-      boardId: char.id,
-      senderType: "ai_host",
-      senderName: char.name,
-      senderAvatar: char.avatar,
-      content: `こんにちは！${char.name.split("（")[0]}です。今日はどんなことをお手伝いしましょうか？何でも気軽に聞いてくださいね。`,
-      timestamp: t(10),
-      llmProvider: char.llmProvider,
-    },
-    {
-      id: "m2",
-      boardId: char.id,
-      senderType: "user",
-      senderName: "あなた",
-      content: "こんにちは！最近ちょっと相談したいことがあって。",
-      timestamp: t(9),
-    },
-    {
-      id: "m3",
-      boardId: char.id,
-      senderType: "ai_host",
-      senderName: char.name,
-      senderAvatar: char.avatar,
-      content:
-        "もちろんです！どんなことでもお話しください。じっくり一緒に考えましょう。",
-      timestamp: t(8),
-      llmProvider: char.llmProvider,
-    },
-    {
-      id: "m4",
-      boardId: char.id,
-      senderType: "user",
-      senderName: "あなた",
-      content:
-        "ありがとう。実はプロジェクトの進め方で悩んでいて、アドバイスがほしいんだ。",
-      timestamp: t(5),
-    },
-    {
-      id: "m5",
-      boardId: char.id,
-      senderType: "ai_host",
-      senderName: char.name,
-      senderAvatar: char.avatar,
-      content:
-        "プロジェクトの進め方ですね。具体的にはどの部分で悩んでいますか？\n\n**例えば：**\n- スケジュールの管理\n- チーム内のコミュニケーション\n- 技術選定や設計\n\nもう少し詳しく教えていただけると、的確なアドバイスができます！",
-      timestamp: t(4),
-      llmProvider: char.llmProvider,
-    },
-  ];
-
-  // Add a guest AI message for variety
-  if (char.id === "aoi" || char.id === "sora") {
-    base.push({
-      id: "m6",
-      boardId: char.id,
-      senderType: "ai_guest",
-      senderName: char.id === "aoi" ? "空（そら）" : "蓮（れん）",
-      senderAvatar: char.id === "aoi" ? "空" : "蓮",
-      content:
-        char.id === "aoi"
-          ? "横から失礼します！技術的な観点からだと、まずはタスクの分解と優先度付けがおすすめです。"
-          : "ビジネス面からの視点を追加しますね。ROIを考えると、MVP優先が良さそうです。",
-      timestamp: t(2),
-      llmProvider: char.id === "aoi" ? "claude" : "gemini",
-    });
-  }
-
-  return base;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,9 +182,66 @@ export default function BoardPage() {
   const router = useRouter();
   const characterId = params.characterId as string;
 
-  const character =
-    characters.find((c) => c.id === characterId) ?? characters[0];
-  const initialMessages = makeDummyMessages(character);
+  // ---- Fetch characters from API ----
+  const [characters, setCharacters] = useState<BoardCharacter[]>([]);
+  const [loadingChars, setLoadingChars] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/animas");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: { animas: AnimaResponse[] } = await res.json();
+        if (!cancelled) {
+          setCharacters(data.animas.map(toCharacter));
+        }
+      } catch (err) {
+        console.error("Failed to fetch animas:", err);
+      } finally {
+        if (!cancelled) setLoadingChars(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- Fetch initial messages from API ----
+  const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/rooms/${characterId}/messages`);
+        if (!res.ok) return; // Room may not exist yet — that's OK
+        const data: { messages: StoredMessageResponse[] } = await res.json();
+        if (!cancelled) {
+          setInitialMessages(data.messages.map(toChatMessage));
+        }
+      } catch (err) {
+        console.error("Failed to fetch messages:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [characterId]);
+
+  // ---- Resolve current character ----
+  const character = useMemo(
+    () => characters.find((c) => c.id === characterId) ?? characters[0],
+    [characters, characterId],
+  );
+
+  // ---- Loading state ----
+  if (loadingChars || !character) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
+          <p className="mt-3 text-sm text-gray-500">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full">
@@ -293,6 +252,7 @@ export default function BoardPage() {
       <div className="flex-1">
         <ChatBoard
           character={character}
+          roomId={characterId}
           initialMessages={initialMessages}
           onBack={() => router.push("/characters")}
         />

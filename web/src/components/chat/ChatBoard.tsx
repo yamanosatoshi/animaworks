@@ -15,6 +15,8 @@ import { useChatPolling } from "@/hooks/useChatPolling";
 
 interface ChatBoardProps {
   character: BoardCharacter;
+  /** Room ID for API calls (e.g. characterId) */
+  roomId: string;
   initialMessages: ChatMessage[];
   onBack?: () => void;
 }
@@ -25,25 +27,28 @@ interface ChatBoardProps {
 
 export function ChatBoard({
   character,
+  roomId,
   initialMessages,
   onBack,
 }: ChatBoardProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ---- SSE streaming hook ----
-  const { startStream } = useChatStream({
+  // ---- SSE streaming hook — connects to POST /api/rooms/[roomId]/messages ----
+  const { startStream, isStreaming } = useChatStream({
     character,
+    roomId,
     onComplete: (_full, _id) => {
-      // Could persist the completed message to backend here
+      // Stream finished — message is already saved by the backend
     },
   });
 
   // ---- Polling hook — detect messages from other users / AI guests ----
+  // Disabled while streaming to avoid duplicates with the active SSE stream
   useChatPolling({
-    boardId: character.id,
-    intervalMs: 2000,
-    enabled: true,
+    boardId: roomId,
+    intervalMs: 3000,
+    enabled: !isStreaming,
     onNewMessages: (newMsgs) => {
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
@@ -58,9 +63,15 @@ export function ChatBoard({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ---- Reset messages when character changes ----
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
+
   // ---- Send handler ----
   const handleSend = useCallback(
     (text: string) => {
+      // Add the user message to local state immediately (optimistic UI)
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         boardId: character.id,
@@ -71,8 +82,9 @@ export function ChatBoard({
       };
       setMessages((prev) => [...prev, userMsg]);
 
-      // Trigger SSE streaming after a short delay (simulate network latency)
-      setTimeout(() => startStream(text, setMessages), 600);
+      // Start the SSE stream — the backend POST saves the user message
+      // and streams back the AI response
+      startStream(text, setMessages);
     },
     [character.id, startStream],
   );
@@ -104,7 +116,7 @@ export function ChatBoard({
       </div>
 
       {/* Input */}
-      <InputBar onSend={handleSend} />
+      <InputBar onSend={handleSend} disabled={isStreaming} />
     </div>
   );
 }
