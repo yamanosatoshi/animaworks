@@ -10,6 +10,7 @@ type TaskStatus = "done" | "in_progress" | "not_started";
 
 interface CrewMember {
   name: string;
+  role: string;
   tag: string;
   stars: number;
   color: string;
@@ -44,46 +45,11 @@ function makeActivity(): boolean[][] {
 }
 
 const crewMembers: CrewMember[] = [
-  {
-    name: "太郎",
-    tag: "リーダー",
-    stars: 5,
-    color: "bg-violet-400",
-    initial: "太",
-    activity: makeActivity(),
-  },
-  {
-    name: "さくら",
-    tag: "営業",
-    stars: 4,
-    color: "bg-pink-400",
-    initial: "さ",
-    activity: makeActivity(),
-  },
-  {
-    name: "ケンシロウ",
-    tag: "エンジニア",
-    stars: 5,
-    color: "bg-blue-400",
-    initial: "ケ",
-    activity: makeActivity(),
-  },
-  {
-    name: "葵",
-    tag: "デザイナー",
-    stars: 4,
-    color: "bg-emerald-400",
-    initial: "葵",
-    activity: makeActivity(),
-  },
-  {
-    name: "吉田梅",
-    tag: "マーケ",
-    stars: 3,
-    color: "bg-amber-400",
-    initial: "梅",
-    activity: makeActivity(),
-  },
+  { name: "太郎", role: "プロジェクト全般管理・業務支援", tag: "リーダー", stars: 5, color: "bg-violet-400", initial: "太", activity: makeActivity() },
+  { name: "さくら", role: "マーケティング・コピーライティング", tag: "営業", stars: 4, color: "bg-pink-400", initial: "さ", activity: makeActivity() },
+  { name: "ケンシロウ", role: "システム開発・技術調査", tag: "エンジニア", stars: 5, color: "bg-blue-400", initial: "ケ", activity: makeActivity() },
+  { name: "葵", role: "UI/UXデザイン・アセット制作", tag: "デザイナー", stars: 4, color: "bg-emerald-400", initial: "葵", activity: makeActivity() },
+  { name: "吉田梅", role: "経理・請求書管理・スケジュール調整", tag: "事務", stars: 3, color: "bg-amber-400", initial: "梅", activity: makeActivity() },
 ];
 
 const taskGroups: ProjectGroup[] = [
@@ -228,7 +194,7 @@ export default function DashboardPage() {
             {crewMembers.map((member) => (
               <div
                 key={member.name}
-                className="flex min-w-[130px] max-w-[140px] flex-col items-center gap-1.5 rounded-xl border border-border-default bg-card-bg px-3 py-3 text-center shadow-sm"
+                className="flex min-w-[130px] max-w-[140px] flex-col items-center gap-1.5 rounded-xl border border-border-default bg-card-bg px-3 pt-3 pb-0 text-center shadow-sm overflow-hidden"
               >
                 {/* Avatar */}
                 <div
@@ -242,10 +208,14 @@ export default function DashboardPage() {
                 <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-text-muted">
                   {member.tag}
                 </span>
+                {/* Role */}
+                <p className="text-[10px] text-text-muted leading-tight line-clamp-2 px-1">{member.role}</p>
                 {/* Stars */}
                 <Stars count={member.stars} />
                 {/* Activity grid */}
                 <ActivityGrid grid={member.activity} />
+                {/* Color bar */}
+                <div className={`mt-2 w-full h-1 ${member.color}`} />
               </div>
             ))}
           </div>

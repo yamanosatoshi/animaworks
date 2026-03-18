@@ -12,6 +12,7 @@ interface CrewMember {
   color: string;
   initial: string;
   status: string;
+  role: string;
 }
 
 interface BoardMember {
@@ -62,11 +63,11 @@ interface ExpenseDoc {
 // ---------------------------------------------------------------------------
 
 const crewMembers: CrewMember[] = [
-  { name: "太郎", tag: "リーダー", color: "bg-violet-400", initial: "太", status: "タスクの進捗を確認中です" },
-  { name: "さくら", tag: "営業", color: "bg-pink-400", initial: "さ", status: "見積書を作成しています" },
-  { name: "ケンシロウ", tag: "エンジニア", color: "bg-blue-400", initial: "ケ", status: "コードレビュー対応中" },
-  { name: "葵", tag: "デザイナー", color: "bg-emerald-400", initial: "葵", status: "デザイン修正を進めています" },
-  { name: "吉田梅", tag: "マーケ", color: "bg-amber-400", initial: "梅", status: "SNS投稿を準備中" },
+  { name: "太郎", tag: "リーダー", color: "bg-violet-400", initial: "太", status: "タスクの進捗を確認中です", role: "プロジェクト全般管理・業務支援" },
+  { name: "さくら", tag: "営業", color: "bg-pink-400", initial: "さ", status: "見積書を作成しています", role: "マーケティング・コピーライティング" },
+  { name: "ケンシロウ", tag: "エンジニア", color: "bg-blue-400", initial: "ケ", status: "コードレビュー対応中", role: "システム開発・技術調査" },
+  { name: "葵", tag: "デザイナー", color: "bg-emerald-400", initial: "葵", status: "デザイン修正を進めています", role: "UI/UXデザイン・アセット制作" },
+  { name: "吉田梅", tag: "事務", color: "bg-amber-400", initial: "梅", status: "SNS投稿を準備中", role: "経理・請求書管理・スケジュール調整" },
 ];
 
 const boards: Board[] = [
