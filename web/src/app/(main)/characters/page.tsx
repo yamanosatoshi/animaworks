@@ -243,9 +243,15 @@ export default function CharactersPage() {
               {selected.assets.map((asset) => (
                 <div
                   key={asset.label}
-                  className="flex h-24 w-20 items-center justify-center rounded-lg border border-border-default bg-gray-100 text-xs text-text-muted"
+                  className="relative flex h-24 w-20 flex-col items-center justify-center overflow-hidden rounded-lg border border-border-default bg-gray-50"
                 >
-                  {asset.label}
+                  {/* Character silhouette placeholder */}
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br ${selected.avatarColor} opacity-80`}>
+                    <svg className="h-8 w-8 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                  </div>
+                  <span className="mt-1 text-[10px] font-medium text-text-muted">{asset.label}</span>
                 </div>
               ))}
             </div>

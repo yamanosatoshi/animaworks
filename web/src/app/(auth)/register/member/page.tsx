@@ -95,32 +95,9 @@ export default function RegisterMemberPage() {
               </button>
             </div>
 
-            {/* Invited members preview */}
+            {/* Invited members preview — populated dynamically */}
             <div className="mt-1 flex flex-col gap-2">
-              {["alice@example.com", "bob@example.com"].map((email) => (
-                <div
-                  key={email}
-                  className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#7c5cfc]/20 text-[#7c5cfc]">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                      </svg>
-                    </div>
-                    <span className="text-sm text-[#8a8aa0]">{email}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-[#8a8aa0] hover:text-white transition-colors"
-                    aria-label={`${email}を削除`}
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+              {/* Empty by default; members appear here after clicking 追加 */}
             </div>
           </div>
 

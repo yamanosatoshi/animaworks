@@ -70,8 +70,8 @@ const plans: Plan[] = [
   {
     id: "starter",
     name: "Starter",
-    price: "¥0,000",
-    credit: "0,000",
+    price: "¥9,800",
+    credit: "5,000",
     crewCount: "1名",
     crewIcon: <PersonIcon />,
     description: "優秀なリーダーが1人いればいい。",
@@ -79,8 +79,8 @@ const plans: Plan[] = [
   {
     id: "team",
     name: "Team",
-    price: "¥00,000",
-    credit: "0,000",
+    price: "¥29,800",
+    credit: "20,000",
     crewCount: "3名",
     crewIcon: <PeopleIcon />,
     description: "複数人のAIによる連携プレイを実現。",
@@ -89,8 +89,8 @@ const plans: Plan[] = [
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "¥00,000",
-    credit: "0,000",
+    price: "¥98,000",
+    credit: "50,000",
     crewCount: "5名",
     crewIcon: <BuildingIcon />,
     description: "部門まるごとAI化。専用モデル提供。",

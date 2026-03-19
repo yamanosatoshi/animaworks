@@ -60,7 +60,7 @@ interface ApprovalDoc {
 }
 
 // ---------------------------------------------------------------------------
-// Dummy data
+// Sample data
 // ---------------------------------------------------------------------------
 
 const crewMembers: CrewMember[] = [
@@ -377,13 +377,11 @@ function BoardList({
 function ChatArea({
   board,
   messages,
-  suggestions,
   tasks,
   onSend,
 }: {
   board: Board;
   messages: ChatMessage[];
-  suggestions: Suggestion[];
   tasks: TaskItem[];
   onSend: (text: string) => void;
 }) {
@@ -457,23 +455,6 @@ function ChatArea({
               </div>
             </div>
           ))}
-
-          {/* AI Suggestions */}
-          {suggestions.length > 0 && (
-            <div className="mt-2 space-y-1.5">
-              {suggestions.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-start gap-2 rounded-lg bg-violet-50/80 border border-violet-100 px-3 py-2 text-[12px] text-violet-700"
-                >
-                  <svg className="h-4 w-4 shrink-0 mt-0.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5.002 5.002 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span>{s.text}</span>
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Task items in chat */}
           {tasks.length > 0 && (
@@ -565,11 +546,13 @@ function ChatArea({
 /** Right panel — Approval / Suggestions panel (per design: hicrew_chat_subwindow.png) */
 function ApprovalPanel({
   docs,
+  suggestions,
   selectedDoc,
   onDocClick,
   onClose,
 }: {
   docs: ApprovalDoc[];
+  suggestions: Suggestion[];
   selectedDoc: ApprovalDoc | null;
   onDocClick: (doc: ApprovalDoc) => void;
   onClose: () => void;
@@ -632,21 +615,48 @@ function ApprovalPanel({
               {selectedDoc.aiComment}
             </p>
           </div>
+
+          {/* Email body preview */}
+          <div className="rounded-lg border border-border-default bg-white p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-text-muted">メール本文</span>
+              <button
+                type="button"
+                className="text-[11px] font-medium text-accent hover:underline"
+              >
+                全文を表示
+              </button>
+            </div>
+            <div className="rounded-md bg-page-bg p-2.5 text-[11px] leading-relaxed text-text-secondary">
+              <p>お世話になっております。</p>
+              <p className="mt-1">添付の{selectedDoc.type}（{selectedDoc.title}）をご確認の上、ご承認をお願いいたします。</p>
+              <p className="mt-1 text-text-disabled">…</p>
+            </div>
+          </div>
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-end gap-3 border-t border-border-default px-5 py-3">
+        <div className="flex flex-col gap-2 border-t border-border-default px-5 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-border-default px-3 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50 transition-colors"
+            >
+              却下する
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-sm font-medium text-accent hover:bg-accent/10 transition-colors"
+            >
+              条件をつけて承認
+            </button>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border-default px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-50 transition-colors"
-          >
-            却下する
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover transition-colors"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
           >
             承認する
           </button>
@@ -657,14 +667,16 @@ function ApprovalPanel({
 
   // List view — pending approvals
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border-default bg-card-bg">
-      <div className="border-b border-border-default px-4 py-3">
-        <h3 className="text-sm font-bold text-text-primary">
-          経費書等：承認待ち <span className="ml-1 text-text-muted font-normal">{docs.filter(d => d.status === "pending").length}件</span>
-        </h3>
-      </div>
+    <aside className="flex h-full w-[280px] shrink-0 flex-col border-l border-border-default bg-card-bg">
+      <div className="flex-1 overflow-y-auto">
+        {/* Approval section header */}
+        <div className="border-b border-border-default px-4 py-3">
+          <h3 className="text-sm font-bold text-text-primary">
+            経費書等：承認待ち <span className="ml-1 text-text-muted font-normal">{docs.filter(d => d.status === "pending").length}件</span>
+          </h3>
+        </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="p-3 space-y-2">
         {docs.map((doc) => (
           <button
             key={doc.id}
@@ -699,6 +711,36 @@ function ApprovalPanel({
             </div>
           </button>
         ))}
+
+      </div>
+
+      {/* Suggestions section */}
+      {suggestions.length > 0 && (
+        <div>
+          <div className="border-t border-border-default px-4 py-3">
+            <h3 className="text-sm font-bold text-text-primary">提案</h3>
+          </div>
+          <div className="px-3 pb-3 space-y-1.5">
+            {suggestions.map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center gap-2 rounded-lg bg-violet-50/80 border border-violet-100 px-3 py-2 text-[12px] text-violet-700"
+              >
+                <svg className="h-4 w-4 shrink-0 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5.002 5.002 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <span className="flex-1 min-w-0">{s.text}</span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-accent-hover"
+                >
+                  実行
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       </div>
     </aside>
   );
@@ -791,14 +833,14 @@ export default function ChatPage() {
         <ChatArea
           board={activeBoard}
           messages={activeMessages}
-          suggestions={activeSuggestions}
           tasks={activeTasks}
           onSend={handleSend}
         />
 
-        {/* Right — Approval panel (right-fixed split, not modal) */}
+        {/* Right — Approval + Suggestions panel */}
         <ApprovalPanel
           docs={approvalDocs}
+          suggestions={activeSuggestions}
           selectedDoc={selectedDoc}
           onDocClick={setSelectedDoc}
           onClose={() => setSelectedDoc(null)}

@@ -34,22 +34,55 @@ interface ProjectGroup {
 }
 
 // ---------------------------------------------------------------------------
-// Dummy data
+// Sample data
 // ---------------------------------------------------------------------------
 
-/** Generate a random 7×4 activity grid */
-function makeActivity(): boolean[][] {
-  return Array.from({ length: 4 }, () =>
-    Array.from({ length: 7 }, () => Math.random() > 0.4),
-  );
-}
-
 const crewMembers: CrewMember[] = [
-  { name: "太郎", role: "プロジェクト全般管理・業務支援", tag: "リーダー", stars: 5, color: "bg-violet-400", initial: "太", activity: makeActivity() },
-  { name: "さくら", role: "マーケティング・コピーライティング", tag: "営業", stars: 4, color: "bg-pink-400", initial: "さ", activity: makeActivity() },
-  { name: "ケンシロウ", role: "システム開発・技術調査", tag: "エンジニア", stars: 5, color: "bg-blue-400", initial: "ケ", activity: makeActivity() },
-  { name: "葵", role: "UI/UXデザイン・アセット制作", tag: "デザイナー", stars: 4, color: "bg-emerald-400", initial: "葵", activity: makeActivity() },
-  { name: "吉田梅", role: "経理・請求書管理・スケジュール調整", tag: "事務", stars: 3, color: "bg-amber-400", initial: "梅", activity: makeActivity() },
+  {
+    name: "太郎", role: "プロジェクト全般管理・業務支援", tag: "リーダー", stars: 5, color: "bg-violet-400", initial: "太",
+    activity: [
+      [true, true, false, true, true, true, false],
+      [true, false, true, true, true, false, true],
+      [true, true, true, false, true, true, true],
+      [false, true, true, true, false, true, true],
+    ],
+  },
+  {
+    name: "さくら", role: "マーケティング・コピーライティング", tag: "営業", stars: 4, color: "bg-pink-400", initial: "さ",
+    activity: [
+      [true, false, true, true, false, true, true],
+      [false, true, true, false, true, true, false],
+      [true, true, false, true, true, false, true],
+      [true, false, true, true, true, true, false],
+    ],
+  },
+  {
+    name: "ケンシロウ", role: "システム開発・技術調査", tag: "エンジニア", stars: 5, color: "bg-blue-400", initial: "ケ",
+    activity: [
+      [true, true, true, true, false, true, true],
+      [true, true, false, true, true, true, true],
+      [false, true, true, true, true, true, false],
+      [true, true, true, false, true, true, true],
+    ],
+  },
+  {
+    name: "葵", role: "UI/UXデザイン・アセット制作", tag: "デザイナー", stars: 4, color: "bg-emerald-400", initial: "葵",
+    activity: [
+      [false, true, true, false, true, true, true],
+      [true, true, false, true, false, true, true],
+      [true, false, true, true, true, false, true],
+      [true, true, true, false, true, true, false],
+    ],
+  },
+  {
+    name: "吉田梅", role: "経理・請求書管理・スケジュール調整", tag: "事務", stars: 3, color: "bg-amber-400", initial: "梅",
+    activity: [
+      [true, false, false, true, true, false, true],
+      [false, true, true, false, true, true, false],
+      [true, false, true, true, false, true, false],
+      [false, true, false, true, true, false, true],
+    ],
+  },
 ];
 
 const taskGroups: ProjectGroup[] = [
@@ -277,11 +310,59 @@ export default function DashboardPage() {
 
             <div className="mt-auto">
               <p className="mb-2 text-xs font-medium text-text-muted">オフィスの様子</p>
-              <div className="h-36 w-full overflow-hidden rounded-xl bg-gradient-to-br from-violet-400 via-indigo-400 to-blue-400">
-                {/* Placeholder illustration */}
-                <div className="flex h-full items-center justify-center text-white/60 text-sm">
-                  🏢 オフィスイラスト
-                </div>
+              <div className="relative h-36 w-full overflow-hidden rounded-xl bg-gradient-to-br from-violet-400 via-indigo-400 to-blue-400">
+                {/* Isometric office illustration */}
+                <svg className="absolute inset-0 h-full w-full" viewBox="0 0 400 160" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  {/* Floor */}
+                  <rect x="0" y="110" width="400" height="50" fill="white" fillOpacity="0.08" />
+                  {/* Desk 1 */}
+                  <rect x="30" y="80" width="70" height="8" rx="2" fill="white" fillOpacity="0.25" />
+                  <rect x="40" y="88" width="6" height="22" fill="white" fillOpacity="0.15" />
+                  <rect x="84" y="88" width="6" height="22" fill="white" fillOpacity="0.15" />
+                  {/* Monitor 1 */}
+                  <rect x="45" y="56" width="34" height="24" rx="2" fill="white" fillOpacity="0.35" />
+                  <rect x="48" y="59" width="28" height="17" rx="1" fill="white" fillOpacity="0.15" />
+                  <rect x="59" y="80" width="6" height="3" fill="white" fillOpacity="0.2" />
+                  {/* Person 1 */}
+                  <circle cx="55" cy="68" r="0" fill="white" fillOpacity="0" />
+                  <circle cx="25" cy="72" r="7" fill="white" fillOpacity="0.3" />
+                  <rect x="20" y="79" width="10" height="18" rx="3" fill="white" fillOpacity="0.2" />
+                  {/* Desk 2 */}
+                  <rect x="160" y="75" width="80" height="8" rx="2" fill="white" fillOpacity="0.25" />
+                  <rect x="170" y="83" width="6" height="27" fill="white" fillOpacity="0.15" />
+                  <rect x="224" y="83" width="6" height="27" fill="white" fillOpacity="0.15" />
+                  {/* Monitor 2 */}
+                  <rect x="178" y="48" width="38" height="27" rx="2" fill="white" fillOpacity="0.35" />
+                  <rect x="181" y="51" width="32" height="20" rx="1" fill="white" fillOpacity="0.15" />
+                  <rect x="194" y="75" width="6" height="3" fill="white" fillOpacity="0.2" />
+                  {/* Person 2 */}
+                  <circle cx="155" cy="66" r="8" fill="white" fillOpacity="0.3" />
+                  <rect x="149" y="74" width="12" height="20" rx="3" fill="white" fillOpacity="0.2" />
+                  {/* Desk 3 */}
+                  <rect x="290" y="82" width="75" height="8" rx="2" fill="white" fillOpacity="0.25" />
+                  <rect x="300" y="90" width="6" height="20" fill="white" fillOpacity="0.15" />
+                  <rect x="349" y="90" width="6" height="20" fill="white" fillOpacity="0.15" />
+                  {/* Monitor 3 */}
+                  <rect x="308" y="58" width="32" height="24" rx="2" fill="white" fillOpacity="0.35" />
+                  <rect x="311" y="61" width="26" height="17" rx="1" fill="white" fillOpacity="0.15" />
+                  <rect x="321" y="82" width="6" height="3" fill="white" fillOpacity="0.2" />
+                  {/* Person 3 */}
+                  <circle cx="285" cy="74" r="7" fill="white" fillOpacity="0.3" />
+                  <rect x="280" y="81" width="10" height="16" rx="3" fill="white" fillOpacity="0.2" />
+                  {/* Plant */}
+                  <rect x="130" y="90" width="6" height="20" fill="white" fillOpacity="0.15" />
+                  <ellipse cx="133" cy="84" rx="12" ry="10" fill="white" fillOpacity="0.18" />
+                  <ellipse cx="128" cy="78" rx="8" ry="7" fill="white" fillOpacity="0.12" />
+                  {/* Bookshelf */}
+                  <rect x="370" y="30" width="20" height="80" rx="2" fill="white" fillOpacity="0.12" />
+                  <rect x="372" y="38" width="16" height="4" fill="white" fillOpacity="0.08" />
+                  <rect x="372" y="52" width="16" height="4" fill="white" fillOpacity="0.08" />
+                  <rect x="372" y="66" width="16" height="4" fill="white" fillOpacity="0.08" />
+                  {/* Window */}
+                  <rect x="240" y="20" width="30" height="40" rx="2" fill="white" fillOpacity="0.1" />
+                  <line x1="255" y1="20" x2="255" y2="60" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+                  <line x1="240" y1="40" x2="270" y2="40" stroke="white" strokeOpacity="0.15" strokeWidth="1" />
+                </svg>
               </div>
             </div>
           </div>
