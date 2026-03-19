@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
+import { useRegistration } from "@/context/RegistrationContext";
 
 interface Plan {
   id: string;
@@ -98,7 +99,7 @@ const plans: Plan[] = [
 ];
 
 export default function RegisterPlanPage() {
-  const [selectedPlan, setSelectedPlan] = useState("team");
+  const { state, set } = useRegistration();
 
   return (
     <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white/95 backdrop-blur-sm shadow-lg">
@@ -126,7 +127,7 @@ export default function RegisterPlanPage() {
         {/* Plan Cards */}
         <div className="mt-6 flex flex-col gap-3">
           {plans.map((plan) => {
-            const isSelected = selectedPlan === plan.id;
+            const isSelected = state.selectedPlan === plan.id;
             return (
               <label
                 key={plan.id}
@@ -150,7 +151,7 @@ export default function RegisterPlanPage() {
                   name="plan"
                   value={plan.id}
                   checked={isSelected}
-                  onChange={() => setSelectedPlan(plan.id)}
+                  onChange={() => set("selectedPlan", plan.id)}
                   className="h-4 w-4 shrink-0 accent-accent"
                 />
 

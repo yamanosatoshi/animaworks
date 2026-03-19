@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
+import { useRegistration } from "@/context/RegistrationContext";
 
 export default function RegisterBasicPage() {
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [microsoftConnected, setMicrosoftConnected] = useState(true);
+  const { state, set } = useRegistration();
 
   return (
     <div className="flex w-full max-w-4xl overflow-hidden rounded-2xl bg-white/95 backdrop-blur-sm shadow-lg">
@@ -45,6 +45,8 @@ export default function RegisterBasicPage() {
               name="username"
               type="text"
               placeholder="Taro Yamada"
+              value={state.username}
+              onChange={(e) => set("username", e.target.value)}
               className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
@@ -62,6 +64,8 @@ export default function RegisterBasicPage() {
               name="orgName"
               type="text"
               placeholder="例）株式会社〇〇〇〇マーケティング部"
+              value={state.orgName}
+              onChange={(e) => set("orgName", e.target.value)}
               className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
@@ -103,7 +107,7 @@ export default function RegisterBasicPage() {
                 <span className="text-sm font-medium text-text-primary">
                   Google Workspace (Gmail)
                 </span>
-                {googleConnected ? (
+                {state.googleConnected ? (
                   <span className="text-xs font-medium text-green-600">
                     接続済み
                   </span>
@@ -111,10 +115,10 @@ export default function RegisterBasicPage() {
                   <span className="text-xs text-gray-400">未接続</span>
                 )}
               </div>
-              {googleConnected ? (
+              {state.googleConnected ? (
                 <button
                   type="button"
-                  onClick={() => setGoogleConnected(false)}
+                  onClick={() => set("googleConnected", false)}
                   className="cursor-pointer text-xs text-gray-400 hover:text-gray-600"
                 >
                   解除
@@ -122,7 +126,7 @@ export default function RegisterBasicPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setGoogleConnected(true)}
+                  onClick={() => set("googleConnected", true)}
                   className="cursor-pointer rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
                   接続する
@@ -146,7 +150,7 @@ export default function RegisterBasicPage() {
                 <span className="text-sm font-medium text-text-primary">
                   Microsoft 365 (Outlook)
                 </span>
-                {microsoftConnected ? (
+                {state.microsoftConnected ? (
                   <span className="text-xs font-medium text-green-600">
                     接続済み
                   </span>
@@ -154,10 +158,10 @@ export default function RegisterBasicPage() {
                   <span className="text-xs text-gray-400">未接続</span>
                 )}
               </div>
-              {microsoftConnected ? (
+              {state.microsoftConnected ? (
                 <button
                   type="button"
-                  onClick={() => setMicrosoftConnected(false)}
+                  onClick={() => set("microsoftConnected", false)}
                   className="cursor-pointer text-xs text-gray-400 hover:text-gray-600"
                 >
                   解除
@@ -165,7 +169,7 @@ export default function RegisterBasicPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setMicrosoftConnected(true)}
+                  onClick={() => set("microsoftConnected", true)}
                   className="cursor-pointer rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
                 >
                   接続する

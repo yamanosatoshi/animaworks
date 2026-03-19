@@ -1,18 +1,18 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
-
-export const metadata = {
-  title: "コピーロボット作成 | HiCrew",
-  description: "AIコピーロボットの設定を行います",
-};
+import { useRegistration } from "@/context/RegistrationContext";
 
 export default function RegisterRobotPage() {
+  const { state, set } = useRegistration();
+
   return (
     <div className="w-full max-w-lg">
       {/* Stepper */}
       <div className="mb-8">
-        <RegistrationStepper currentStep={6} />
+        <RegistrationStepper currentStep={4} />
       </div>
 
       {/* Card */}
@@ -42,6 +42,8 @@ export default function RegisterRobotPage() {
               type="text"
               placeholder="マイアシスタント"
               required
+              value={state.robotName}
+              onChange={(e) => set("robotName", e.target.value)}
               className="w-full rounded-lg border border-white/[0.06] bg-white/[0.04] px-3.5 py-2.5 text-sm text-white placeholder:text-[#8a8aa0]/50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[#4a9eff] focus:border-transparent hover:border-white/[0.12]"
             />
           </div>
@@ -54,6 +56,8 @@ export default function RegisterRobotPage() {
             <select
               id="personality"
               name="personality"
+              value={state.personality}
+              onChange={(e) => set("personality", e.target.value)}
               className="w-full cursor-pointer rounded-lg border border-white/[0.06] bg-white/[0.04] px-3.5 py-2.5 text-sm text-white transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[#4a9eff] focus:border-transparent hover:border-white/[0.12] [&>option]:bg-[#12121e]"
             >
               <option value="professional">プロフェッショナル（丁寧・ビジネス向け）</option>
@@ -85,6 +89,15 @@ export default function RegisterRobotPage() {
                     type="checkbox"
                     name="specialization"
                     value={skill.id}
+                    checked={state.specializations.includes(skill.id)}
+                    onChange={() => {
+                      const current = state.specializations;
+                      if (current.includes(skill.id)) {
+                        set("specializations", current.filter((s) => s !== skill.id));
+                      } else {
+                        set("specializations", [...current, skill.id]);
+                      }
+                    }}
                     className="sr-only peer"
                   />
                   <span className="text-base" aria-hidden="true">{skill.icon}</span>
@@ -106,6 +119,8 @@ export default function RegisterRobotPage() {
               name="instructions"
               rows={3}
               placeholder="例: 日本語で回答してください。回答は簡潔にまとめてください。"
+              value={state.instructions}
+              onChange={(e) => set("instructions", e.target.value)}
               className="w-full resize-none rounded-lg border border-white/[0.06] bg-white/[0.04] px-3.5 py-2.5 text-sm text-white placeholder:text-[#8a8aa0]/50 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[#4a9eff] focus:border-transparent hover:border-white/[0.12]"
             />
             <p className="text-xs text-[#8a8aa0]">ロボットに覚えてほしいルールや好みを入力できます</p>
@@ -120,7 +135,7 @@ export default function RegisterRobotPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">マイアシスタント</p>
+                <p className="text-sm font-semibold text-white">{state.robotName || "マイアシスタント"}</p>
                 <p className="text-xs text-[#8a8aa0]">プレビュー</p>
               </div>
             </div>

@@ -1,18 +1,18 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
-
-export const metadata = {
-  title: "お支払い情報 | HiCrew",
-  description: "お支払い情報を入力してください",
-};
+import { useRegistration, PLAN_META } from "@/context/RegistrationContext";
 
 export default function RegisterPaymentPage() {
+  const { state } = useRegistration();
+
   return (
     <div className="w-full max-w-lg">
       {/* Stepper */}
       <div className="mb-8">
-        <RegistrationStepper currentStep={7} />
+        <RegistrationStepper currentStep={4} />
       </div>
 
       {/* Card */}
@@ -25,8 +25,12 @@ export default function RegisterPaymentPage() {
         {/* Selected plan reminder */}
         <div className="mb-6 flex items-center justify-between rounded-lg border border-[#4a9eff]/20 bg-[#4a9eff]/[0.04] px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-white">Pro プラン</p>
-            <p className="text-xs text-[#8a8aa0]">月額 ¥2,980（税込）</p>
+            <p className="text-sm font-semibold text-white">
+              {PLAN_META[state.selectedPlan]?.name ?? "Team"} プラン
+            </p>
+            <p className="text-xs text-[#8a8aa0]">
+              {PLAN_META[state.selectedPlan]?.price ?? "¥29,800"} /月（税込）
+            </p>
           </div>
           <Link
             href="/register/plan"
@@ -158,17 +162,19 @@ export default function RegisterPaymentPage() {
             </h3>
             <div className="flex flex-col gap-2">
               <div className="flex justify-between">
-                <span className="text-sm text-[#8a8aa0]">Pro プラン（月額）</span>
-                <span className="text-sm text-white">¥2,980</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-[#8a8aa0]">消費税（10%）</span>
-                <span className="text-sm text-white">¥298</span>
+                <span className="text-sm text-[#8a8aa0]">
+                  {PLAN_META[state.selectedPlan]?.name ?? "Team"} プラン（月額）
+                </span>
+                <span className="text-sm text-white">
+                  {PLAN_META[state.selectedPlan]?.price ?? "¥29,800"}
+                </span>
               </div>
               <div className="my-1 border-t border-white/[0.06]" />
               <div className="flex justify-between">
                 <span className="text-sm font-semibold text-white">合計（税込）</span>
-                <span className="text-sm font-bold text-[#4a9eff]">¥2,980</span>
+                <span className="text-sm font-bold text-[#4a9eff]">
+                  {PLAN_META[state.selectedPlan]?.price ?? "¥29,800"}
+                </span>
               </div>
             </div>
           </div>

@@ -1,24 +1,14 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import type { StoredAnima, StoredMessage } from "@/lib/storage/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface CrewMember {
-  name: string;
-  tag: string;
-  color: string;
-  initial: string;
-  stateLabel: string;
-  stateTone: "active" | "analysis" | "waiting";
-  bullets: string[];
-  warningText?: string;
-  progress?: number;
-  waitingText?: string;
-  role: string;
-}
+/** Anima without systemPrompt (as returned by public API) */
+type PublicAnima = Omit<StoredAnima, "systemPrompt">;
 
 interface BoardMember {
   initial: string;
@@ -41,6 +31,7 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   isAI?: boolean;
+  isStreaming?: boolean;
 }
 
 interface Suggestion {
@@ -65,287 +56,8 @@ interface ApprovalDoc {
 }
 
 // ---------------------------------------------------------------------------
-// Sample data
+// Static data (approval docs — kept as placeholder)
 // ---------------------------------------------------------------------------
-
-const crewMembers: CrewMember[] = [
-  {
-    name: "太郎",
-    tag: "リーダー",
-    color: "bg-violet-400",
-    initial: "太",
-    stateLabel: "稼働中",
-    stateTone: "active",
-    bullets: [
-      "音声データのテキスト解析",
-      "納期変更・予算追加を重要事項として抽出",
-      "★ Notion「2024年プロジェクト管理」に書き出し",
-    ],
-    progress: 80,
-    role: "プロジェクト全般管理・業務支援",
-  },
-  {
-    name: "さくら",
-    tag: "プロジェクトマネージャー",
-    color: "bg-pink-400",
-    initial: "さ",
-    stateLabel: "稼働中",
-    stateTone: "active",
-    bullets: [
-      "返信メール下書き作成中・・・",
-      "タスクリストをSlack #general に投稿",
-    ],
-    warningText: "送信前に承認が必要です",
-    progress: 80,
-    role: "マーケティング・コピーライティング",
-  },
-  {
-    name: "ケンシロウ",
-    tag: "カスタマーサクセス",
-    color: "bg-blue-400",
-    initial: "ケ",
-    stateLabel: "稼働中",
-    stateTone: "active",
-    bullets: [
-      "返信メール下書き作成中・・・",
-      "★ Notion「2024年プロジェクト管理」に書き出し",
-    ],
-    warningText: "送信前に承認が必要です",
-    progress: 80,
-    role: "システム開発・技術調査",
-  },
-  {
-    name: "葵",
-    tag: "マーケター / リサーチ",
-    color: "bg-emerald-400",
-    initial: "葵",
-    stateLabel: "分析中",
-    stateTone: "analysis",
-    bullets: [
-      "競合B社・C社の情報を収集中",
-      "競合A社の料金ページを取得",
-    ],
-    progress: 80,
-    role: "UI/UXデザイン・アセット制作",
-  },
-  {
-    name: "吉田梅",
-    tag: "営業アシスタント",
-    color: "bg-amber-400",
-    initial: "梅",
-    stateLabel: "待機中",
-    stateTone: "waiting",
-    bullets: ["リード5件のフォローメール下書き完了"],
-    waitingText: "次のタスクが割り当てられるのを待機中",
-    role: "経理・請求書管理・スケジュール調整",
-  },
-];
-
-const stateBadgeStyle: Record<CrewMember["stateTone"], string> = {
-  active: "bg-emerald-100 text-emerald-700 border-emerald-300",
-  analysis: "bg-amber-100 text-amber-700 border-amber-300",
-  waiting: "bg-gray-100 text-gray-500 border-gray-300",
-};
-
-const boards: Board[] = [
-  {
-    id: "board-1",
-    name: "プロジェクトA組",
-    members: [
-      { initial: "太", color: "bg-violet-400" },
-      { initial: "さ", color: "bg-pink-400" },
-      { initial: "ケ", color: "bg-blue-400" },
-      { initial: "葵", color: "bg-emerald-400" },
-    ],
-    lastMessage: "今日もよろしくお願いします。スケジュールについて確認です。",
-    lastTime: "10:30",
-  },
-  {
-    id: "board-2",
-    name: "デザインチーム",
-    members: [
-      { initial: "葵", color: "bg-emerald-400" },
-      { initial: "太", color: "bg-violet-400" },
-      { initial: "梅", color: "bg-amber-400" },
-    ],
-    lastMessage: "新しいUIモックアップをアップしました。",
-    lastTime: "9:45",
-  },
-  {
-    id: "board-3",
-    name: "営業ミーティング",
-    members: [
-      { initial: "さ", color: "bg-pink-400" },
-      { initial: "太", color: "bg-violet-400" },
-    ],
-    lastMessage: "来週の提案資料を確認してください。",
-    lastTime: "昨日",
-  },
-  {
-    id: "board-4",
-    name: "マーケティング企画",
-    members: [
-      { initial: "梅", color: "bg-amber-400" },
-      { initial: "さ", color: "bg-pink-400" },
-      { initial: "葵", color: "bg-emerald-400" },
-    ],
-    lastMessage: "投稿スケジュール作成に取りかかっています。",
-    lastTime: "昨日",
-  },
-  {
-    id: "board-5",
-    name: "開発タスク管理",
-    members: [
-      { initial: "ケ", color: "bg-blue-400" },
-      { initial: "太", color: "bg-violet-400" },
-      { initial: "葵", color: "bg-emerald-400" },
-    ],
-    lastMessage: "フロントエンド実装のPRレビューお願いします。",
-    lastTime: "月曜",
-  },
-];
-
-const boardMessages: Record<string, ChatMessage[]> = {
-  "board-1": [
-    {
-      id: "1",
-      sender: "太郎",
-      senderInitial: "太",
-      senderColor: "bg-violet-400",
-      content: "今日もよろしくお願いします。本日のタスク確認をしましょう。",
-      timestamp: "9:00",
-    },
-    {
-      id: "2",
-      sender: "さくら",
-      senderInitial: "さ",
-      senderColor: "bg-pink-400",
-      content: "おはようございます！見積書の件、先方に確認中です。",
-      timestamp: "9:15",
-    },
-    {
-      id: "3",
-      sender: "ケンシロウ",
-      senderInitial: "ケ",
-      senderColor: "bg-blue-400",
-      content: "昨日のビルドですが、テストも全部通りました。デプロイの準備はOKです。",
-      timestamp: "9:30",
-    },
-    {
-      id: "4",
-      sender: "葵",
-      senderInitial: "葵",
-      senderColor: "bg-emerald-400",
-      content: "デザイン修正も完了しました。ケンシロウさんに連携済みです。",
-      timestamp: "9:45",
-    },
-    {
-      id: "ai-1",
-      sender: "HiCrew AI",
-      senderInitial: "H",
-      senderColor: "bg-accent",
-      content: "進捗としてよく、タスクの残りもスムーズに進められるかと思います。スケジュールに沿っていることを確認しつつ下記ご覧ください。",
-      timestamp: "10:00",
-      isAI: true,
-    },
-    {
-      id: "5",
-      sender: "太郎",
-      senderInitial: "太",
-      senderColor: "bg-violet-400",
-      content: "順調ですね。午後にはレビューを入れましょう。さくらさん、見積書の回答が来たら共有お願いします。",
-      timestamp: "10:15",
-    },
-  ],
-  "board-2": [
-    {
-      id: "1",
-      sender: "葵",
-      senderInitial: "葵",
-      senderColor: "bg-emerald-400",
-      content: "新しいUIモックアップをアップしました。フィードバックお願いします。",
-      timestamp: "9:30",
-    },
-    {
-      id: "2",
-      sender: "太郎",
-      senderInitial: "太",
-      senderColor: "bg-violet-400",
-      content: "確認しました。全体的にいい感じです！CTAボタンの色をもう少し目立たせてもいいかも。",
-      timestamp: "9:45",
-    },
-  ],
-  "board-3": [
-    {
-      id: "1",
-      sender: "さくら",
-      senderInitial: "さ",
-      senderColor: "bg-pink-400",
-      content: "来週の提案資料を確認してください。修正箇所があれば教えてください。",
-      timestamp: "昨日",
-    },
-  ],
-  "board-4": [
-    {
-      id: "1",
-      sender: "吉田梅",
-      senderInitial: "梅",
-      senderColor: "bg-amber-400",
-      content: "投稿スケジュール作成に取りかかっています。来週中に完成予定です。",
-      timestamp: "昨日",
-    },
-  ],
-  "board-5": [
-    {
-      id: "1",
-      sender: "ケンシロウ",
-      senderInitial: "ケ",
-      senderColor: "bg-blue-400",
-      content: "フロントエンド実装のPRレビューお願いします。",
-      timestamp: "月曜",
-    },
-  ],
-};
-
-const boardSuggestions: Record<string, Suggestion[]> = {
-  "board-1": [
-    { id: "s1", text: "タスクの確認とスムーズな情報共有を心がけましょう" },
-    { id: "s2", text: "タスク管理ボードへ入力する事を確認する" },
-    { id: "s3", text: "問題がなければ次のNoteにアップロードしてください" },
-  ],
-  "board-2": [
-    { id: "s1", text: "モックアップのフィードバック期限は明日です" },
-  ],
-  "board-3": [
-    { id: "s1", text: "提案資料のレビュー期限が近づいています" },
-  ],
-  "board-4": [
-    { id: "s1", text: "投稿スケジュールのテンプレートを活用しましょう" },
-  ],
-  "board-5": [
-    { id: "s1", text: "PRレビューの優先度を設定してください" },
-  ],
-};
-
-const boardTasks: Record<string, TaskItem[]> = {
-  "board-1": [
-    { id: "t1", text: "タスク管理ボードへ入力する事を確認する", done: false },
-    { id: "t2", text: "見積書をNoteにアップする", done: false },
-    { id: "t3", text: "午後のレビュー会議の招集", done: true },
-  ],
-  "board-2": [
-    { id: "t1", text: "UIモックアップのフィードバック回収", done: false },
-  ],
-  "board-3": [
-    { id: "t1", text: "提案資料の最終確認", done: false },
-  ],
-  "board-4": [
-    { id: "t1", text: "投稿スケジュール作成", done: false },
-  ],
-  "board-5": [
-    { id: "t1", text: "PRレビュー完了", done: false },
-  ],
-};
 
 const approvalDocs: ApprovalDoc[] = [
   {
@@ -378,6 +90,41 @@ const approvalDocs: ApprovalDoc[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const stateBadgeStyle: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700 border-emerald-300",
+  analysis: "bg-amber-100 text-amber-700 border-amber-300",
+  waiting: "bg-gray-100 text-gray-500 border-gray-300",
+};
+
+function animaStatusToTone(status: StoredAnima["status"]): string {
+  if (status === "online") return "active";
+  if (status === "busy") return "analysis";
+  return "waiting";
+}
+
+function animaStatusLabel(status: StoredAnima["status"]): string {
+  if (status === "online") return "稼働中";
+  if (status === "busy") return "処理中";
+  return "待機中";
+}
+
+function storedMessageToChat(m: StoredMessage, anima?: PublicAnima | null): ChatMessage {
+  const isUser = m.senderType === "user";
+  return {
+    id: m.id,
+    sender: m.senderName,
+    senderInitial: isUser ? "あ" : (anima?.avatar ?? m.senderName.charAt(0)),
+    senderColor: isUser ? "bg-gray-600" : (anima ? `bg-gradient-to-br ${anima.avatarColor}` : "bg-accent"),
+    content: m.content,
+    timestamp: new Date(m.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+    isAI: !isUser,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
@@ -399,9 +146,11 @@ function OverlappingAvatars({ members }: { members: BoardMember[] }) {
 
 /** Left panel — Board list */
 function BoardList({
+  boards,
   activeId,
   onSelect,
 }: {
+  boards: Board[];
   activeId: string;
   onSelect: (id: string) => void;
 }) {
@@ -497,7 +246,7 @@ function ChatArea({
       <header className="flex items-center justify-between border-b border-border-default bg-card-bg px-5 py-3">
         <div className="flex items-center gap-3">
           <h2 className="text-sm font-bold text-text-primary">
-            プロジェクト名：{board.name}
+            {board.name}
           </h2>
           <OverlappingAvatars members={board.members} />
         </div>
@@ -524,9 +273,12 @@ function ChatArea({
                   <span className="text-[11px] text-text-disabled">
                     {msg.timestamp}
                   </span>
+                  {msg.isStreaming && (
+                    <span className="text-[10px] text-accent animate-pulse">入力中...</span>
+                  )}
                 </div>
                 <p className={`mt-1 text-sm leading-relaxed ${msg.isAI ? "text-accent-dark rounded-lg bg-violet-50 px-3 py-2" : "text-text-secondary"}`}>
-                  {msg.content}
+                  {msg.content || (msg.isStreaming ? "..." : "")}
                 </p>
               </div>
             </div>
@@ -590,7 +342,7 @@ function ChatArea({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="意見してください..."
+              placeholder="メッセージを入力..."
               rows={1}
               className="w-full resize-none rounded-xl border border-border-default bg-page-bg px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20"
               aria-label="メッセージ入力"
@@ -619,7 +371,7 @@ function ChatArea({
   );
 }
 
-/** Right panel — Approval / Suggestions panel (per design: hicrew_chat_subwindow.png) */
+/** Right panel — Approval / Suggestions panel */
 function ApprovalPanel({
   docs,
   suggestions,
@@ -634,7 +386,7 @@ function ApprovalPanel({
   onClose: () => void;
 }) {
   if (selectedDoc) {
-    // Detail view — right fixed split panel (not a centered modal)
+    // Detail view — right fixed split panel
     return (
       <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-border-default bg-card-bg">
         {/* Header */}
@@ -827,21 +579,71 @@ function ApprovalPanel({
 // ---------------------------------------------------------------------------
 
 export default function ChatPage() {
-  const [activeBoardId, setActiveBoardId] = useState("board-1");
-  const [messagesMap, setMessagesMap] = useState(boardMessages);
+  const [animas, setAnimas] = useState<PublicAnima[]>([]);
+  const [activeBoardId, setActiveBoardId] = useState<string>("");
+  const [messagesMap, setMessagesMap] = useState<Record<string, ChatMessage[]>>({});
   const [selectedDoc, setSelectedDoc] = useState<ApprovalDoc | null>(null);
+  const [loading, setLoading] = useState(true);
+  // Track which rooms already had their history fetched
+  const fetchedRooms = useRef<Set<string>>(new Set());
+
+  // ---- 1. Fetch animas on mount ----
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/animas")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const list: PublicAnima[] = data.animas ?? [];
+        setAnimas(list);
+        if (list.length > 0) setActiveBoardId(list[0].id);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // ---- 2. Derive boards from animas ----
+  const boards: Board[] = animas.map((a) => ({
+    id: a.id,
+    name: a.name,
+    members: [{ initial: a.avatar, color: `bg-gradient-to-br ${a.avatarColor}` }],
+    lastMessage: a.description,
+    lastTime: a.status === "online" ? "オンライン" : "オフライン",
+  }));
 
   const activeBoard = boards.find((b) => b.id === activeBoardId) ?? boards[0];
   const activeMessages = messagesMap[activeBoardId] ?? [];
-  const activeSuggestions = boardSuggestions[activeBoardId] ?? [];
-  const activeTasks = boardTasks[activeBoardId] ?? [];
 
+  // ---- 3. Load message history when board changes ----
+  useEffect(() => {
+    if (!activeBoardId || fetchedRooms.current.has(activeBoardId)) return;
+    fetchedRooms.current.add(activeBoardId);
+
+    const anima = animas.find((a) => a.id === activeBoardId) ?? null;
+
+    fetch(`/api/rooms/anima-${activeBoardId}/messages`)
+      .then((r) => r.json())
+      .then((data) => {
+        const stored: StoredMessage[] = data.messages ?? [];
+        const chatMsgs = stored.map((m) => storedMessageToChat(m, anima));
+        setMessagesMap((prev) => ({ ...prev, [activeBoardId]: chatMsgs }));
+      })
+      .catch(() => {
+        setMessagesMap((prev) => ({ ...prev, [activeBoardId]: [] }));
+      });
+  }, [activeBoardId, animas]);
+
+  // ---- 4. Send message with SSE streaming ----
   const handleSend = useCallback(
-    (text: string) => {
+    async (text: string) => {
       const now = new Date();
       const ts = `${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
 
-      const newMsg: ChatMessage = {
+      // User message — add immediately
+      const userMsg: ChatMessage = {
         id: `user-${Date.now()}`,
         sender: "あなた",
         senderInitial: "あ",
@@ -850,69 +652,193 @@ export default function ChatPage() {
         timestamp: ts,
       };
 
+      const boardId = activeBoardId; // capture for closures
+
       setMessagesMap((prev) => ({
         ...prev,
-        [activeBoardId]: [...(prev[activeBoardId] ?? []), newMsg],
+        [boardId]: [...(prev[boardId] ?? []), userMsg],
       }));
+
+      // AI placeholder
+      const aiMsgId = `ai-${Date.now()}`;
+      const anima = animas.find((a) => a.id === boardId) ?? null;
+      const aiMsg: ChatMessage = {
+        id: aiMsgId,
+        sender: anima?.name ?? "AI",
+        senderInitial: anima?.avatar ?? "A",
+        senderColor: anima ? `bg-gradient-to-br ${anima.avatarColor}` : "bg-accent",
+        content: "",
+        timestamp: ts,
+        isAI: true,
+        isStreaming: true,
+      };
+
+      setMessagesMap((prev) => ({
+        ...prev,
+        [boardId]: [...(prev[boardId] ?? []), aiMsg],
+      }));
+
+      try {
+        const res = await fetch(`/api/rooms/anima-${boardId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: text, animaId: boardId }),
+        });
+
+        if (!res.body) throw new Error("No response body");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            if (!part.startsWith("data: ")) continue;
+            try {
+              const event = JSON.parse(part.slice(6));
+              if (event.type === "chunk") {
+                setMessagesMap((prev) => {
+                  const msgs = prev[boardId] ?? [];
+                  return {
+                    ...prev,
+                    [boardId]: msgs.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: m.content + event.content }
+                        : m,
+                    ),
+                  };
+                });
+              } else if (event.type === "done") {
+                setMessagesMap((prev) => {
+                  const msgs = prev[boardId] ?? [];
+                  return {
+                    ...prev,
+                    [boardId]: msgs.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: event.content, isStreaming: false }
+                        : m,
+                    ),
+                  };
+                });
+              } else if (event.type === "error") {
+                setMessagesMap((prev) => {
+                  const msgs = prev[boardId] ?? [];
+                  return {
+                    ...prev,
+                    [boardId]: msgs.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: `エラー: ${event.error}`, isStreaming: false }
+                        : m,
+                    ),
+                  };
+                });
+              }
+            } catch {
+              /* skip unparseable SSE lines */
+            }
+          }
+        }
+
+        // Ensure streaming flag is cleared even if "done" event wasn't received
+        setMessagesMap((prev) => {
+          const msgs = prev[boardId] ?? [];
+          return {
+            ...prev,
+            [boardId]: msgs.map((m) =>
+              m.id === aiMsgId && m.isStreaming ? { ...m, isStreaming: false } : m,
+            ),
+          };
+        });
+      } catch {
+        setMessagesMap((prev) => {
+          const msgs = prev[boardId] ?? [];
+          return {
+            ...prev,
+            [boardId]: msgs.map((m) =>
+              m.id === aiMsgId
+                ? { ...m, content: "通信エラーが発生しました", isStreaming: false }
+                : m,
+            ),
+          };
+        });
+      }
     },
-    [activeBoardId],
+    [activeBoardId, animas],
   );
+
+  // ---- Loading state ----
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-text-muted">読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (animas.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm text-text-muted">アニマが登録されていません。</p>
+      </div>
+    );
+  }
+
+  // ---- 5. Crew cards from anima data ----
+  const crewCards = animas.map((a) => {
+    const tone = animaStatusToTone(a.status);
+    return (
+      <div key={a.id} className="min-w-[220px] rounded-xl border border-border-default bg-white p-2.5 shadow-sm">
+        <div className="flex items-start gap-2">
+          <div className="relative shrink-0">
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white bg-gradient-to-br ${a.avatarColor}`}
+            >
+              {a.avatar}
+            </div>
+            {a.status === "online" && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1.5">
+              <p className="truncate text-[11px] font-semibold text-text-primary">{a.name}</p>
+              <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${stateBadgeStyle[tone] ?? stateBadgeStyle.waiting}`}>
+                {animaStatusLabel(a.status)}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[10px] text-text-muted">{a.description}</p>
+          </div>
+        </div>
+
+        {a.tags.length > 0 && (
+          <ul className="mt-2 space-y-0.5">
+            {a.tags.slice(0, 3).map((tag, idx) => (
+              <li key={`${a.id}-tag-${idx}`} className="truncate text-[11px] text-text-secondary">
+                ● {tag}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  });
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top section: Header + Crew cards with speech bubbles */}
+      {/* Top section: Header + Crew cards */}
       <div className="border-b border-border-default bg-card-bg px-5 pt-4 pb-3">
         <h1 className="mb-3 text-lg font-bold text-text-primary">ホーム</h1>
 
-        {/* Crew member cards — horizontal scroll with structured status */}
+        {/* Crew member cards — horizontal scroll */}
         <div className="overflow-x-auto pb-1">
-          <div className="flex gap-3">
-            {crewMembers.map((member) => (
-              <div key={member.name} className="min-w-[220px] rounded-xl border border-border-default bg-white p-2.5 shadow-sm">
-                <div className="flex items-start gap-2">
-                  <div className="relative shrink-0">
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${member.color}`}
-                    >
-                      {member.initial}
-                    </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <p className="truncate text-[11px] font-semibold text-text-primary">{member.name}</p>
-                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${stateBadgeStyle[member.stateTone]}`}>
-                        {member.stateLabel}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[10px] text-text-muted">{member.tag}</p>
-                  </div>
-                </div>
-
-                <ul className="mt-2 space-y-0.5">
-                  {member.warningText && (
-                    <li className="text-[11px] text-pink-500">● {member.warningText}</li>
-                  )}
-                  {member.bullets.slice(0, 2).map((line, idx) => (
-                    <li key={`${member.name}-line-${idx}`} className="truncate text-[11px] text-text-secondary">
-                      ● {line}
-                    </li>
-                  ))}
-                </ul>
-
-                {typeof member.progress === "number" ? (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
-                      <div className="h-full rounded-full bg-lime-400" style={{ width: `${member.progress}%` }} />
-                    </div>
-                    <span className="text-[10px] text-text-muted">{member.progress}%</span>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[10px] text-gray-400">◌ {member.waitingText}</p>
-                )}
-              </div>
-            ))}
-          </div>
+          <div className="flex gap-3">{crewCards}</div>
         </div>
 
         {/* New chat button */}
@@ -927,20 +853,22 @@ export default function ChatPage() {
       {/* 3-column layout */}
       <div className="flex min-h-0 flex-1">
         {/* Left — Board list */}
-        <BoardList activeId={activeBoardId} onSelect={setActiveBoardId} />
+        <BoardList boards={boards} activeId={activeBoardId} onSelect={setActiveBoardId} />
 
         {/* Center — Chat area */}
-        <ChatArea
-          board={activeBoard}
-          messages={activeMessages}
-          tasks={activeTasks}
-          onSend={handleSend}
-        />
+        {activeBoard && (
+          <ChatArea
+            board={activeBoard}
+            messages={activeMessages}
+            tasks={[]}
+            onSend={handleSend}
+          />
+        )}
 
         {/* Right — Approval + Suggestions panel */}
         <ApprovalPanel
           docs={approvalDocs}
-          suggestions={activeSuggestions}
+          suggestions={[]}
           selectedDoc={selectedDoc}
           onDocClick={setSelectedDoc}
           onClose={() => setSelectedDoc(null)}

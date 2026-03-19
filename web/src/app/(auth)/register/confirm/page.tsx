@@ -1,18 +1,18 @@
+"use client";
+
 import React from "react";
 import Link from "next/link";
 import { RegistrationStepper } from "@/components/register/RegistrationStepper";
-
-export const metadata = {
-  title: "登録確認 | HiCrew",
-  description: "入力内容を確認してください",
-};
+import { useRegistration, PLAN_META } from "@/context/RegistrationContext";
 
 export default function RegisterConfirmPage() {
+  const { state } = useRegistration();
+
   return (
     <div className="w-full max-w-lg">
       {/* Stepper */}
       <div className="mb-8">
-        <RegistrationStepper currentStep={5} />
+        <RegistrationStepper currentStep={3} />
       </div>
 
       {/* Card */}
@@ -39,10 +39,8 @@ export default function RegisterConfirmPage() {
             </div>
             <div className="flex flex-col divide-y divide-white/[0.06]">
               {[
-                { label: "お名前", value: "山田 太郎" },
-                { label: "表示名", value: "taro" },
-                { label: "メールアドレス", value: "taro@example.com" },
-                { label: "パスワード", value: "••••••••" },
+                { label: "お名前", value: state.username || "—" },
+                { label: "組織名", value: state.orgName || "—" },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-xs text-[#8a8aa0]">{row.label}</span>
@@ -67,8 +65,12 @@ export default function RegisterConfirmPage() {
             </div>
             <div className="flex items-center justify-between px-4 py-3">
               <div>
-                <p className="text-sm font-semibold text-white">Pro プラン</p>
-                <p className="text-xs text-[#8a8aa0]">¥2,980 / 月（税込）</p>
+                <p className="text-sm font-semibold text-white">
+                  {PLAN_META[state.selectedPlan]?.name ?? "Team"} プラン
+                </p>
+                <p className="text-xs text-[#8a8aa0]">
+                  {PLAN_META[state.selectedPlan]?.price ?? "¥29,800"} / 月（税込）
+                </p>
               </div>
               <span className="rounded-full bg-[#4a9eff]/10 px-2.5 py-0.5 text-xs font-medium text-[#4a9eff]">
                 おすすめ
@@ -91,9 +93,9 @@ export default function RegisterConfirmPage() {
             </div>
             <div className="flex flex-col divide-y divide-white/[0.06]">
               {[
-                { label: "チーム名", value: "マイチーム" },
-                { label: "チームURL", value: "hicrew.app/my-team" },
-                { label: "招待メンバー", value: "2名" },
+                { label: "チーム名", value: state.teamName || "—" },
+                { label: "チームURL", value: state.teamSlug ? `hicrew.app/${state.teamSlug}` : "—" },
+                { label: "招待メンバー", value: `${state.invitedEmails.length}名` },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
                   <span className="text-xs text-[#8a8aa0]">{row.label}</span>
