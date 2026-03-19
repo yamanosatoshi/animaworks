@@ -12,11 +12,18 @@ interface CrewMember {
   name: string;
   role: string;
   tag: string;
-  stars: number;
+  level: string;
   color: string;
   initial: string;
-  /** 7×4 activity grid — true = active day */
-  activity: boolean[][];
+  skills: {
+    tsk: number;
+    esp: number;
+    mp: number;
+  };
+  taskTitle: string;
+  taskSubText?: string;
+  progress?: number;
+  waitingText?: string;
 }
 
 interface Task {
@@ -39,49 +46,63 @@ interface ProjectGroup {
 
 const crewMembers: CrewMember[] = [
   {
-    name: "太郎", role: "プロジェクト全般管理・業務支援", tag: "リーダー", stars: 5, color: "bg-violet-400", initial: "太",
-    activity: [
-      [true, true, false, true, true, true, false],
-      [true, false, true, true, true, false, true],
-      [true, true, true, false, true, true, true],
-      [false, true, true, true, false, true, true],
-    ],
+    name: "太郎",
+    role: "プロジェクト全体統括・意思決定支援",
+    tag: "リーダー",
+    level: "Lv.12",
+    color: "bg-violet-400",
+    initial: "太",
+    skills: { tsk: 4, esp: 3, mp: 3 },
+    taskTitle: "★ Notion「2024年プロジェクト管理」に書き出し",
+    taskSubText: "留意: に書き出し中 ●●●",
+    progress: 80,
   },
   {
-    name: "さくら", role: "マーケティング・コピーライティング", tag: "営業", stars: 4, color: "bg-pink-400", initial: "さ",
-    activity: [
-      [true, false, true, true, false, true, true],
-      [false, true, true, false, true, true, false],
-      [true, true, false, true, true, false, true],
-      [true, false, true, true, true, true, false],
-    ],
+    name: "さくら",
+    role: "競合調査・トレンド分析・資料集約",
+    tag: "プロジェクトマネージャー",
+    level: "Lv.10",
+    color: "bg-pink-400",
+    initial: "さ",
+    skills: { tsk: 2, esp: 2, mp: 2 },
+    taskTitle: "メール下書き生成中・・・",
+    taskSubText: "AI送信前に承認が必要です",
+    progress: 80,
   },
   {
-    name: "ケンシロウ", role: "システム開発・技術調査", tag: "エンジニア", stars: 5, color: "bg-blue-400", initial: "ケ",
-    activity: [
-      [true, true, true, true, false, true, true],
-      [true, true, false, true, true, true, true],
-      [false, true, true, true, true, true, false],
-      [true, true, true, false, true, true, true],
-    ],
+    name: "ケンシロウ",
+    role: "競合調査・トレンド分析・資料集約",
+    tag: "カスタマーサクセス",
+    level: "Lv.8",
+    color: "bg-blue-400",
+    initial: "ケ",
+    skills: { tsk: 2, esp: 2, mp: 2 },
+    taskTitle: "メール下書き生成中・・・",
+    taskSubText: "AI送信前に承認が必要です",
+    progress: 80,
   },
   {
-    name: "葵", role: "UI/UXデザイン・アセット制作", tag: "デザイナー", stars: 4, color: "bg-emerald-400", initial: "葵",
-    activity: [
-      [false, true, true, false, true, true, true],
-      [true, true, false, true, false, true, true],
-      [true, false, true, true, true, false, true],
-      [true, true, true, false, true, true, false],
-    ],
+    name: "葵",
+    role: "競合調査・トレンド分析・資料集約",
+    tag: "マーケター / リサーチ",
+    level: "Lv.8",
+    color: "bg-emerald-400",
+    initial: "葵",
+    skills: { tsk: 2, esp: 2, mp: 2 },
+    taskTitle: "音声データのテキスト解析",
+    taskSubText: "指示待ち",
+    progress: 0,
   },
   {
-    name: "吉田梅", role: "経理・請求書管理・スケジュール調整", tag: "事務", stars: 3, color: "bg-amber-400", initial: "梅",
-    activity: [
-      [true, false, false, true, true, false, true],
-      [false, true, true, false, true, true, false],
-      [true, false, true, true, false, true, false],
-      [false, true, false, true, true, false, true],
-    ],
+    name: "吉田梅",
+    role: "競合調査・トレンド分析・資料集約",
+    tag: "営業アシスタント",
+    level: "Lv.5",
+    color: "bg-amber-400",
+    initial: "梅",
+    skills: { tsk: 1, esp: 0, mp: 0 },
+    taskTitle: "待機中...",
+    waitingText: "次のタスクが割り当てられるのを待機中",
   },
 ];
 
@@ -139,40 +160,19 @@ const taskGroups: ProjectGroup[] = [
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function Stars({ count }: { count: number }) {
+function SkillStars({ count }: { count: number }) {
   return (
-    <div className="flex items-center justify-center gap-0.5">
+    <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => (
         <svg
           key={i}
-          className={`h-3 w-3 ${i < count ? "text-yellow-400" : "text-gray-200"}`}
+          className={`h-3 w-3 ${i < count ? "text-violet-400" : "text-gray-300"}`}
           fill="currentColor"
           viewBox="0 0 20 20"
           aria-hidden="true"
         >
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
-      ))}
-    </div>
-  );
-}
-
-/** 7×4 heatmap-style activity grid */
-function ActivityGrid({ grid }: { grid: boolean[][] }) {
-  return (
-    <div className="mt-1.5 flex flex-col gap-[3px]">
-      {grid.map((row, ri) => (
-        <div key={ri} className="flex gap-[3px] justify-center">
-          {row.map((active, ci) => (
-            <span
-              key={ci}
-              className={[
-                "h-[6px] w-[6px] rounded-[1px]",
-                active ? "bg-emerald-400" : "bg-gray-200",
-              ].join(" ")}
-            />
-          ))}
-        </div>
       ))}
     </div>
   );
@@ -227,28 +227,62 @@ export default function DashboardPage() {
             {crewMembers.map((member) => (
               <div
                 key={member.name}
-                className="flex min-w-[130px] max-w-[140px] flex-col items-center gap-1.5 rounded-xl border border-border-default bg-card-bg px-3 pt-3 pb-0 text-center shadow-sm overflow-hidden"
+                className="flex min-w-[220px] max-w-[240px] flex-col rounded-xl border border-border-default bg-card-bg p-3 shadow-sm"
               >
-                {/* Avatar */}
-                <div
-                  className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-bold text-white ${member.color}`}
-                >
-                  {member.initial}
+                <div className="flex items-start gap-2">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${member.color}`}
+                  >
+                    {member.initial}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] text-text-muted">
+                          {member.tag}
+                        </span>
+                        <p className="mt-1 text-xl font-semibold leading-none text-text-primary">{member.name}</p>
+                      </div>
+                      <span className="rounded-full bg-violet-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        {member.level}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                {/* Name */}
-                <p className="text-xs font-semibold text-text-primary">{member.name}</p>
-                {/* Tag */}
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-text-muted">
-                  {member.tag}
-                </span>
-                {/* Role */}
-                <p className="text-[10px] text-text-muted leading-tight line-clamp-2 px-1">{member.role}</p>
-                {/* Stars */}
-                <Stars count={member.stars} />
-                {/* Activity grid */}
-                <ActivityGrid grid={member.activity} />
-                {/* Color bar */}
-                <div className={`mt-2 w-full h-1 ${member.color}`} />
+
+                <p className="mt-2 text-[10px] text-text-muted">{member.role}</p>
+
+                <div className="mt-2 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 text-text-secondary">TSK</span>
+                    <SkillStars count={member.skills.tsk} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 text-text-secondary">ESP</span>
+                    <SkillStars count={member.skills.esp} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 text-text-secondary">MP</span>
+                    <SkillStars count={member.skills.mp} />
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg bg-gray-50 px-2.5 py-2">
+                  <p className="text-[11px] text-text-secondary">{member.taskTitle}</p>
+                  {member.taskSubText && (
+                    <p className="mt-1 text-[11px] text-pink-500">{member.taskSubText}</p>
+                  )}
+                  {typeof member.progress === "number" ? (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
+                        <div className="h-full rounded-full bg-lime-400" style={{ width: `${member.progress}%` }} />
+                      </div>
+                      <span className="text-[10px] text-text-muted">{member.progress}%</span>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-gray-400">{member.waitingText}</p>
+                  )}
+                </div>
               </div>
             ))}
           </div>

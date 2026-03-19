@@ -11,7 +11,12 @@ interface CrewMember {
   tag: string;
   color: string;
   initial: string;
-  status: string;
+  stateLabel: string;
+  stateTone: "active" | "analysis" | "waiting";
+  bullets: string[];
+  warningText?: string;
+  progress?: number;
+  waitingText?: string;
   role: string;
 }
 
@@ -64,12 +69,83 @@ interface ApprovalDoc {
 // ---------------------------------------------------------------------------
 
 const crewMembers: CrewMember[] = [
-  { name: "太郎", tag: "リーダー", color: "bg-violet-400", initial: "太", status: "タスクの進捗を確認中です", role: "プロジェクト全般管理・業務支援" },
-  { name: "さくら", tag: "営業", color: "bg-pink-400", initial: "さ", status: "見積書を作成しています", role: "マーケティング・コピーライティング" },
-  { name: "ケンシロウ", tag: "エンジニア", color: "bg-blue-400", initial: "ケ", status: "コードレビュー対応中", role: "システム開発・技術調査" },
-  { name: "葵", tag: "デザイナー", color: "bg-emerald-400", initial: "葵", status: "デザイン修正を進めています", role: "UI/UXデザイン・アセット制作" },
-  { name: "吉田梅", tag: "事務", color: "bg-amber-400", initial: "梅", status: "SNS投稿を準備中", role: "経理・請求書管理・スケジュール調整" },
+  {
+    name: "太郎",
+    tag: "リーダー",
+    color: "bg-violet-400",
+    initial: "太",
+    stateLabel: "稼働中",
+    stateTone: "active",
+    bullets: [
+      "音声データのテキスト解析",
+      "納期変更・予算追加を重要事項として抽出",
+      "★ Notion「2024年プロジェクト管理」に書き出し",
+    ],
+    progress: 80,
+    role: "プロジェクト全般管理・業務支援",
+  },
+  {
+    name: "さくら",
+    tag: "プロジェクトマネージャー",
+    color: "bg-pink-400",
+    initial: "さ",
+    stateLabel: "稼働中",
+    stateTone: "active",
+    bullets: [
+      "返信メール下書き作成中・・・",
+      "タスクリストをSlack #general に投稿",
+    ],
+    warningText: "送信前に承認が必要です",
+    progress: 80,
+    role: "マーケティング・コピーライティング",
+  },
+  {
+    name: "ケンシロウ",
+    tag: "カスタマーサクセス",
+    color: "bg-blue-400",
+    initial: "ケ",
+    stateLabel: "稼働中",
+    stateTone: "active",
+    bullets: [
+      "返信メール下書き作成中・・・",
+      "★ Notion「2024年プロジェクト管理」に書き出し",
+    ],
+    warningText: "送信前に承認が必要です",
+    progress: 80,
+    role: "システム開発・技術調査",
+  },
+  {
+    name: "葵",
+    tag: "マーケター / リサーチ",
+    color: "bg-emerald-400",
+    initial: "葵",
+    stateLabel: "分析中",
+    stateTone: "analysis",
+    bullets: [
+      "競合B社・C社の情報を収集中",
+      "競合A社の料金ページを取得",
+    ],
+    progress: 80,
+    role: "UI/UXデザイン・アセット制作",
+  },
+  {
+    name: "吉田梅",
+    tag: "営業アシスタント",
+    color: "bg-amber-400",
+    initial: "梅",
+    stateLabel: "待機中",
+    stateTone: "waiting",
+    bullets: ["リード5件のフォローメール下書き完了"],
+    waitingText: "次のタスクが割り当てられるのを待機中",
+    role: "経理・請求書管理・スケジュール調整",
+  },
 ];
+
+const stateBadgeStyle: Record<CrewMember["stateTone"], string> = {
+  active: "bg-emerald-100 text-emerald-700 border-emerald-300",
+  analysis: "bg-amber-100 text-amber-700 border-amber-300",
+  waiting: "bg-gray-100 text-gray-500 border-gray-300",
+};
 
 const boards: Board[] = [
   {
@@ -788,28 +864,52 @@ export default function ChatPage() {
       <div className="border-b border-border-default bg-card-bg px-5 pt-4 pb-3">
         <h1 className="mb-3 text-lg font-bold text-text-primary">ホーム</h1>
 
-        {/* Crew member cards — horizontal scroll with status bubbles */}
+        {/* Crew member cards — horizontal scroll with structured status */}
         <div className="overflow-x-auto pb-1">
           <div className="flex gap-3">
             {crewMembers.map((member) => (
-              <div key={member.name} className="flex items-start gap-2 min-w-[220px]">
-                {/* Avatar */}
-                <div className="relative shrink-0">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${member.color}`}
-                  >
-                    {member.initial}
+              <div key={member.name} className="min-w-[220px] rounded-xl border border-border-default bg-white p-2.5 shadow-sm">
+                <div className="flex items-start gap-2">
+                  <div className="relative shrink-0">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white ${member.color}`}
+                    >
+                      {member.initial}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
                   </div>
-                  {/* Online dot */}
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" />
-                </div>
-                {/* Speech bubble */}
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold text-text-primary">{member.name}・{member.tag}</p>
-                  <div className="mt-1 rounded-lg rounded-tl-none bg-page-bg border border-border-default px-2.5 py-1.5">
-                    <p className="text-[11px] text-text-muted leading-relaxed">{member.status}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <p className="truncate text-[11px] font-semibold text-text-primary">{member.name}</p>
+                      <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${stateBadgeStyle[member.stateTone]}`}>
+                        {member.stateLabel}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[10px] text-text-muted">{member.tag}</p>
                   </div>
                 </div>
+
+                <ul className="mt-2 space-y-0.5">
+                  {member.warningText && (
+                    <li className="text-[11px] text-pink-500">● {member.warningText}</li>
+                  )}
+                  {member.bullets.slice(0, 2).map((line, idx) => (
+                    <li key={`${member.name}-line-${idx}`} className="truncate text-[11px] text-text-secondary">
+                      ● {line}
+                    </li>
+                  ))}
+                </ul>
+
+                {typeof member.progress === "number" ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
+                      <div className="h-full rounded-full bg-lime-400" style={{ width: `${member.progress}%` }} />
+                    </div>
+                    <span className="text-[10px] text-text-muted">{member.progress}%</span>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[10px] text-gray-400">◌ {member.waitingText}</p>
+                )}
               </div>
             ))}
           </div>
