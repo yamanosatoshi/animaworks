@@ -51,6 +51,51 @@ export default function RegisterBasicPage() {
             />
           </div>
 
+          {/* メールアドレス */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="email"
+              className="text-sm font-medium text-text-secondary"
+            >
+              メールアドレス <span className="text-accent" aria-label="必須">*</span>
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              required
+              autoComplete="email"
+              value={state.email}
+              onChange={(e) => set("email", e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          {/* パスワード */}
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor="password"
+              className="text-sm font-medium text-text-secondary"
+            >
+              パスワード <span className="text-accent" aria-label="必須">*</span>
+            </label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              placeholder="8文字以上（英字＋数字）"
+              required
+              autoComplete="new-password"
+              value={state.password}
+              onChange={(e) => set("password", e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-gray-400">
+              8文字以上、英字と数字を含めてください
+            </p>
+          </div>
+
           {/* 組織名・チーム名 */}
           <div className="flex flex-col gap-1.5">
             <label

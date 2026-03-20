@@ -1,11 +1,49 @@
-import React from "react";
+"use client";
 
-export const metadata = {
-  title: "ログイン | HiCrew",
-  description: "HiCrewアカウントにログインします",
-};
+import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "ログインに失敗しました");
+        return;
+      }
+
+      // Store token
+      if (data.token) {
+        localStorage.setItem("hicrew_token", data.token);
+      }
+
+      // Redirect to chat
+      router.push("/chat");
+    } catch {
+      setError("ネットワークエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-md rounded-2xl bg-white/90 backdrop-blur-sm px-10 py-12 shadow-lg">
       {/* Logo */}
@@ -70,6 +108,80 @@ export default function LoginPage() {
           Microsoft 365でログイン
         </button>
       </div>
+
+      {/* Divider */}
+      <div className="my-6 flex items-center gap-3">
+        <div className="h-px flex-1 bg-gray-200" />
+        <span className="text-xs text-text-muted">または</span>
+        <div className="h-px flex-1 bg-gray-200" />
+      </div>
+
+      {/* Email/Password form */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && (
+          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="email" className="text-sm font-medium text-text-secondary">
+            メールアドレス
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className="text-sm font-medium text-text-secondary">
+              パスワード
+            </label>
+            <Link
+              href="/reset-password"
+              className="text-xs text-accent hover:text-accent/80 transition-colors"
+            >
+              パスワードを忘れた方
+            </Link>
+          </div>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="パスワードを入力"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3.5 text-sm text-text-primary placeholder:text-gray-400 transition-colors focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-2 flex h-12 w-full items-center justify-center rounded-lg bg-black text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        >
+          {loading ? "ログイン中..." : "ログイン"}
+        </button>
+      </form>
+
+      {/* Sign up link */}
+      <p className="mt-6 text-center text-sm text-text-muted">
+        アカウントをお持ちでない方は{" "}
+        <Link href="/register" className="font-medium text-accent hover:text-accent/80 transition-colors">
+          新規登録
+        </Link>
+      </p>
     </div>
   );
 }

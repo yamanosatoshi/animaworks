@@ -8,6 +8,8 @@ import React, { createContext, useContext, useEffect, useReducer } from "react";
 
 export interface RegistrationState {
   // Step 1: Basic info
+  email: string;
+  password: string;
   username: string;
   orgName: string;
   googleConnected: boolean;
@@ -37,6 +39,8 @@ type Action =
 const STORAGE_KEY = "hicrew_registration";
 
 const initial: RegistrationState = {
+  email: "",
+  password: "",
   username: "",
   orgName: "",
   googleConnected: false,
