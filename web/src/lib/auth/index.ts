@@ -11,20 +11,21 @@ export type {
   StoredUser,
 } from "./types";
 
-export { InMemoryAuth, AuthError } from "./in-memory-auth";
+export { AuthError } from "./in-memory-auth";
+export { SupabaseAuth } from "./supabase-auth";
 
-import { InMemoryAuth } from "./in-memory-auth";
+import { SupabaseAuth } from "./supabase-auth";
 import type { AuthProvider } from "./types";
 
 // ---------------------------------------------------------------------------
-// Singleton — swap to SupabaseAuth when ready
+// Singleton — Supabase Auth (production)
 // ---------------------------------------------------------------------------
 
 let _instance: AuthProvider | null = null;
 
 export function getAuth(): AuthProvider {
   if (!_instance) {
-    _instance = new InMemoryAuth();
+    _instance = new SupabaseAuth();
   }
   return _instance;
 }
