@@ -52,7 +52,17 @@ export function ChatBoard({
     onNewMessages: (newMsgs) => {
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
-        const fresh = newMsgs.filter((m) => !existingIds.has(m.id));
+        // Track user message contents so we can deduplicate optimistic messages
+        // (optimistic IDs like "user-xxx" differ from server-generated IDs)
+        const existingUserContents = new Set(
+          prev.filter((m) => m.senderType === "user").map((m) => m.content),
+        );
+        const fresh = newMsgs.filter((m) => {
+          if (existingIds.has(m.id)) return false;
+          // Deduplicate user messages by content to handle optimistic ID mismatch
+          if (m.senderType === "user" && existingUserContents.has(m.content)) return false;
+          return true;
+        });
         return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
     },
@@ -115,8 +125,10 @@ export function ChatBoard({
         </div>
       </div>
 
-      {/* Input */}
-      <InputBar onSend={handleSend} disabled={isStreaming} />
+      {/* Input — form wrapper prevents Enter-key form submission */}
+      <form onSubmit={(e) => e.preventDefault()}>
+        <InputBar onSend={handleSend} disabled={isStreaming} />
+      </form>
     </div>
   );
 }

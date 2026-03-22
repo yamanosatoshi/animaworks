@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { StoredAnima, StoredMessage } from "@/lib/storage/types";
+import { BrainstormModal } from "@/components/brainstorm/BrainstormModal";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -149,15 +152,27 @@ function BoardList({
   boards,
   activeId,
   onSelect,
+  onBrainstorm,
 }: {
   boards: Board[];
   activeId: string;
   onSelect: (id: string) => void;
+  onBrainstorm: () => void;
 }) {
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-border-default bg-card-bg">
-      <div className="border-b border-border-default px-4 py-3">
+      <div className="border-b border-border-default px-4 py-3 space-y-2">
         <h2 className="text-sm font-bold text-text-primary">掲示板</h2>
+        <button
+          type="button"
+          onClick={onBrainstorm}
+          className="flex w-full items-center gap-2 rounded-lg bg-accent/10 border border-accent/20 px-3 py-2 text-xs font-semibold text-accent transition-colors hover:bg-accent/20 cursor-pointer"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          ブレインストーミング
+        </button>
       </div>
       <nav className="flex-1 overflow-y-auto" aria-label="ボード一覧">
         <ul className="flex flex-col">
@@ -213,6 +228,7 @@ function ChatArea({
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isComposing = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -234,7 +250,9 @@ function ChatArea({
   }, [input, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Cmd+Enter (Mac) または Ctrl+Enter (Windows/Linux) で送信
+    // IME変換中（日本語入力の確定Enter）では送信しない
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isComposing.current) {
       e.preventDefault();
       handleSend();
     }
@@ -277,9 +295,17 @@ function ChatArea({
                     <span className="text-[10px] text-accent animate-pulse">入力中...</span>
                   )}
                 </div>
-                <p className={`mt-1 text-sm leading-relaxed ${msg.isAI ? "text-accent-dark rounded-lg bg-violet-50 px-3 py-2" : "text-text-secondary"}`}>
-                  {msg.content || (msg.isStreaming ? "..." : "")}
-                </p>
+                {msg.isAI ? (
+                  <div className="chat-markdown chat-markdown--light mt-1 text-sm leading-relaxed text-accent-dark rounded-lg bg-violet-50 px-3 py-2">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content || (msg.isStreaming ? "..." : "")}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm leading-relaxed text-text-secondary">
+                    {msg.content}
+                  </p>
+                )}
               </div>
             </div>
           ))}
@@ -323,50 +349,57 @@ function ChatArea({
         </div>
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-border-default bg-card-bg px-5 py-3">
-        <div className="flex items-end gap-3">
-          <button
-            type="button"
-            className="mb-0.5 rounded-lg p-2 text-text-muted transition-colors hover:bg-gray-100 hover:text-text-secondary"
-            aria-label="ファイル添付"
-          >
-            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-            </svg>
-          </button>
+      {/* Input bar — form wrapper prevents Enter-key form submission */}
+      <form onSubmit={(e) => e.preventDefault()}>
+        <div className="border-t border-border-default bg-card-bg px-5 py-3">
+          <div className="flex items-end gap-3">
+            <button
+              type="button"
+              className="mb-0.5 rounded-lg p-2 text-text-muted transition-colors hover:bg-gray-100 hover:text-text-secondary"
+              aria-label="ファイル添付"
+            >
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+              </svg>
+            </button>
 
-          <div className="min-w-0 flex-1">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力..."
-              rows={1}
-              className="w-full resize-none rounded-xl border border-border-default bg-page-bg px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20"
-              aria-label="メッセージ入力"
-            />
+            <div className="min-w-0 flex-1">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onCompositionStart={() => { isComposing.current = true; }}
+                onCompositionEnd={() => { isComposing.current = false; }}
+                placeholder="メッセージを入力..."
+                rows={1}
+                className="w-full resize-none rounded-xl border border-border-default bg-page-bg px-4 py-2.5 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent/20"
+                aria-label="メッセージ入力"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className={[
+                "mb-0.5 flex h-9 w-9 items-center justify-center rounded-xl transition-colors",
+                input.trim()
+                  ? "cursor-pointer bg-accent text-white hover:bg-accent-hover"
+                  : "cursor-not-allowed bg-gray-200 text-text-disabled",
+              ].join(" ")}
+              aria-label="送信"
+            >
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+              </svg>
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className={[
-              "mb-0.5 flex h-9 w-9 items-center justify-center rounded-xl transition-colors",
-              input.trim()
-                ? "cursor-pointer bg-accent text-white hover:bg-accent-hover"
-                : "cursor-not-allowed bg-gray-200 text-text-disabled",
-            ].join(" ")}
-            aria-label="送信"
-          >
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-            </svg>
-          </button>
+          <p className="mt-1.5 text-center text-[11px] text-text-disabled">
+            Shift + Enter で改行 ・ ⌘ + Enter で送信
+          </p>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -584,6 +617,7 @@ export default function ChatPage() {
   const [messagesMap, setMessagesMap] = useState<Record<string, ChatMessage[]>>({});
   const [selectedDoc, setSelectedDoc] = useState<ApprovalDoc | null>(null);
   const [loading, setLoading] = useState(true);
+  const [brainstormModalOpen, setBrainstormModalOpen] = useState(false);
   // Track which rooms already had their history fetched
   const fetchedRooms = useRef<Set<string>>(new Set());
 
@@ -605,14 +639,27 @@ export default function ChatPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // ---- 2. Derive boards from animas ----
-  const boards: Board[] = animas.map((a) => ({
+  // ---- 2. Derive boards from animas + brainstorm boards ----
+  const animaBoards: Board[] = animas.map((a) => ({
     id: a.id,
     name: a.name,
     members: [{ initial: a.avatar, color: `bg-gradient-to-br ${a.avatarColor}` }],
     lastMessage: a.description,
     lastTime: a.status === "online" ? "オンライン" : "オフライン",
   }));
+
+  // Add any brainstorm boards (keys starting with "brainstorm-")
+  const brainstormBoards: Board[] = Object.keys(messagesMap)
+    .filter((k) => k.startsWith("brainstorm-"))
+    .map((k) => ({
+      id: k,
+      name: `BS: ${k.replace("brainstorm-", "").slice(0, 20)}`,
+      members: [{ initial: "B", color: "bg-accent" }],
+      lastMessage: "ブレインストーミング",
+      lastTime: "今",
+    }));
+
+  const boards = [...brainstormBoards, ...animaBoards];
 
   const activeBoard = boards.find((b) => b.id === activeBoardId) ?? boards[0];
   const activeMessages = messagesMap[activeBoardId] ?? [];
@@ -635,6 +682,197 @@ export default function ChatPage() {
         setMessagesMap((prev) => ({ ...prev, [activeBoardId]: [] }));
       });
   }, [activeBoardId, animas]);
+
+  // ---- 3b. Start brainstorm session ----
+  const handleBrainstormStart = useCallback(
+    async (config: {
+      theme: string;
+      constraints: string;
+      expectedOutput: string;
+      characterIds: string[];
+    }) => {
+      setBrainstormModalOpen(false);
+
+      // Create a virtual brainstorm board
+      const bsId = `brainstorm-${Date.now()}`;
+      const bsBoard: Board = {
+        id: bsId,
+        name: `BS: ${config.theme.slice(0, 30)}`,
+        members: config.characterIds
+          .map((id) => animas.find((a) => a.id === id))
+          .filter(Boolean)
+          .map((a) => ({
+            initial: a!.avatar,
+            color: `bg-gradient-to-br ${a!.avatarColor}`,
+          })),
+        lastMessage: "ブレインストーミング中...",
+        lastTime: "今",
+      };
+
+      // Add brainstorm board to the boards list by updating animas state won't work,
+      // so we add the messages directly under the bsId key
+      setMessagesMap((prev) => ({ ...prev, [bsId]: [] }));
+      setActiveBoardId(bsId);
+
+      // Start SSE stream
+      try {
+        const res = await fetch("/api/brainstorm/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            theme: config.theme,
+            constraints: config.constraints,
+            expected_output: config.expectedOutput,
+            character_ids: config.characterIds,
+          }),
+        });
+
+        if (!res.body) throw new Error("No response body");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        // Track current character message
+        let currentCharMsgId = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            let evt: Record<string, string>;
+            try {
+              evt = JSON.parse(line.slice(6));
+            } catch {
+              continue;
+            }
+
+            switch (evt.type) {
+              case "char_start": {
+                const anima = animas.find((a) => a.id === evt.char_id);
+                currentCharMsgId = `bs-char-${evt.char_id}-${Date.now()}`;
+                const msg: ChatMessage = {
+                  id: currentCharMsgId,
+                  sender: evt.char_name,
+                  senderInitial: anima?.avatar ?? evt.char_name.charAt(0),
+                  senderColor: anima ? `bg-gradient-to-br ${anima.avatarColor}` : "bg-accent",
+                  content: "",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  isAI: true,
+                  isStreaming: true,
+                };
+                setMessagesMap((prev) => ({
+                  ...prev,
+                  [bsId]: [...(prev[bsId] ?? []), msg],
+                }));
+                break;
+              }
+              case "char_chunk": {
+                setMessagesMap((prev) => {
+                  const msgs = prev[bsId] ?? [];
+                  return {
+                    ...prev,
+                    [bsId]: msgs.map((m) =>
+                      m.id === currentCharMsgId
+                        ? { ...m, content: m.content + evt.text }
+                        : m,
+                    ),
+                  };
+                });
+                break;
+              }
+              case "char_done": {
+                setMessagesMap((prev) => {
+                  const msgs = prev[bsId] ?? [];
+                  return {
+                    ...prev,
+                    [bsId]: msgs.map((m) =>
+                      m.id === currentCharMsgId
+                        ? { ...m, isStreaming: false }
+                        : m,
+                    ),
+                  };
+                });
+                break;
+              }
+              case "synth_start": {
+                currentCharMsgId = `bs-synth-${Date.now()}`;
+                const synthMsg: ChatMessage = {
+                  id: currentCharMsgId,
+                  sender: `${evt.char_name} - まとめ`,
+                  senderInitial: "S",
+                  senderColor: "bg-gray-700",
+                  content: "",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  isAI: true,
+                  isStreaming: true,
+                };
+                setMessagesMap((prev) => ({
+                  ...prev,
+                  [bsId]: [...(prev[bsId] ?? []), synthMsg],
+                }));
+                break;
+              }
+              case "synth_chunk": {
+                setMessagesMap((prev) => {
+                  const msgs = prev[bsId] ?? [];
+                  return {
+                    ...prev,
+                    [bsId]: msgs.map((m) =>
+                      m.id === currentCharMsgId
+                        ? { ...m, content: m.content + evt.text }
+                        : m,
+                    ),
+                  };
+                });
+                break;
+              }
+              case "synth_done": {
+                setMessagesMap((prev) => {
+                  const msgs = prev[bsId] ?? [];
+                  return {
+                    ...prev,
+                    [bsId]: msgs.map((m) =>
+                      m.id === currentCharMsgId
+                        ? { ...m, isStreaming: false }
+                        : m,
+                    ),
+                  };
+                });
+                break;
+              }
+              case "done":
+                break;
+            }
+          }
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "Unknown error";
+        setMessagesMap((prev) => ({
+          ...prev,
+          [bsId]: [
+            ...(prev[bsId] ?? []),
+            {
+              id: `bs-error-${Date.now()}`,
+              sender: "システム",
+              senderInitial: "!",
+              senderColor: "bg-red-500",
+              content: `ブレインストーミングの実行中にエラーが発生しました: ${errMsg}`,
+              timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+              isAI: true,
+            },
+          ],
+        }));
+      }
+    },
+    [animas],
+  );
 
   // ---- 4. Send message with SSE streaming ----
   const handleSend = useCallback(
@@ -853,7 +1091,7 @@ export default function ChatPage() {
       {/* 3-column layout */}
       <div className="flex min-h-0 flex-1">
         {/* Left — Board list */}
-        <BoardList boards={boards} activeId={activeBoardId} onSelect={setActiveBoardId} />
+        <BoardList boards={boards} activeId={activeBoardId} onSelect={setActiveBoardId} onBrainstorm={() => setBrainstormModalOpen(true)} />
 
         {/* Center — Chat area */}
         {activeBoard && (
@@ -874,6 +1112,13 @@ export default function ChatPage() {
           onClose={() => setSelectedDoc(null)}
         />
       </div>
+
+      {/* Brainstorm Modal */}
+      <BrainstormModal
+        open={brainstormModalOpen}
+        onClose={() => setBrainstormModalOpen(false)}
+        onStart={handleBrainstormStart}
+      />
     </div>
   );
 }

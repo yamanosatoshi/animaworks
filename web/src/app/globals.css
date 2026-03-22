@@ -133,3 +133,121 @@ body {
 .streaming-cursor {
   animation: cursorBlink 1s steps(2) infinite;
 }
+
+/* ============================================
+   Chat Markdown Styles
+   ============================================
+   NOTE: All selectors MUST be flat (e.g. `.chat-markdown h1 { ... }`).
+   CSS nesting syntax (`.chat-markdown { h1 { ... } }`) is NOT supported
+   by Tailwind v4's @tailwindcss/postcss pipeline.
+   ============================================ */
+
+.chat-markdown > *:first-child { margin-top: 0; }
+.chat-markdown > *:last-child { margin-bottom: 0; }
+
+.chat-markdown p { margin: 0.4em 0; line-height: 1.6; }
+.chat-markdown p:first-child { margin-top: 0; }
+.chat-markdown p:last-child { margin-bottom: 0; }
+
+/* Headings — explicit font-size/weight override Tailwind Preflight
+   (Preflight sets h1-h6 { font-size: inherit; font-weight: inherit }) */
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3,
+.chat-markdown h4,
+.chat-markdown h5,
+.chat-markdown h6 { font-weight: 700; margin: 0.8em 0 0.4em; line-height: 1.3; }
+.chat-markdown h1 { font-size: 1.25em; }
+.chat-markdown h2 { font-size: 1.15em; }
+.chat-markdown h3 { font-size: 1.05em; }
+
+.chat-markdown strong { font-weight: 700; }
+.chat-markdown em { font-style: italic; }
+
+/* Inline code — apply to all <code>, then reset inside <pre> below.
+   Avoids :not(pre code) which is a CSS Level 4 complex selector
+   that some processors may not handle correctly. */
+.chat-markdown code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+}
+
+/* Code blocks — reset inline-code styles for <code> inside <pre> */
+.chat-markdown pre {
+  margin: 0.6em 0;
+  padding: 0.75em 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+.chat-markdown pre code {
+  font-family: var(--font-mono, monospace);
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* Lists — override Tailwind Preflight (ol, ul { list-style: none; margin: 0; padding: 0 }) */
+.chat-markdown ul,
+.chat-markdown ol { margin: 0.4em 0; padding-left: 1.5em; }
+.chat-markdown ul { list-style-type: disc; }
+.chat-markdown ol { list-style-type: decimal; }
+.chat-markdown li { margin: 0.15em 0; }
+.chat-markdown li > ul,
+.chat-markdown li > ol { margin: 0.1em 0; }
+
+.chat-markdown blockquote {
+  margin: 0.5em 0;
+  padding: 0.3em 0.8em;
+  border-left: 3px solid;
+  font-style: italic;
+}
+
+.chat-markdown table { margin: 0.5em 0; border-collapse: collapse; font-size: 0.9em; width: 100%; }
+.chat-markdown th,
+.chat-markdown td { padding: 0.35em 0.6em; text-align: left; }
+.chat-markdown th { font-weight: 600; }
+
+.chat-markdown hr { margin: 0.8em 0; border: none; height: 1px; }
+
+.chat-markdown a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* AI bubble (dark bg) */
+.chat-markdown--ai code { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+.chat-markdown--ai pre { background: rgba(0,0,0,0.3); color: #e2e8f0; }
+.chat-markdown--ai pre code { background: none; }
+.chat-markdown--ai blockquote { border-left-color: rgba(255,255,255,0.3); color: #cbd5e1; }
+.chat-markdown--ai th,
+.chat-markdown--ai td { border-bottom: 1px solid rgba(255,255,255,0.1); }
+.chat-markdown--ai th { border-bottom: 2px solid rgba(255,255,255,0.2); }
+.chat-markdown--ai hr { background: rgba(255,255,255,0.15); }
+.chat-markdown--ai a { color: #93c5fd; }
+.chat-markdown--ai a:hover { color: #bfdbfe; }
+
+/* User bubble (blue bg) */
+.chat-markdown--user code { background: rgba(255,255,255,0.15); color: #ffffff; }
+.chat-markdown--user pre { background: rgba(0,0,0,0.2); color: #f0f9ff; }
+.chat-markdown--user pre code { background: none; }
+.chat-markdown--user blockquote { border-left-color: rgba(255,255,255,0.4); color: #e0f2fe; }
+.chat-markdown--user th,
+.chat-markdown--user td { border-bottom: 1px solid rgba(255,255,255,0.15); }
+.chat-markdown--user th { border-bottom: 2px solid rgba(255,255,255,0.25); }
+.chat-markdown--user hr { background: rgba(255,255,255,0.2); }
+.chat-markdown--user a { color: #e0f2fe; }
+.chat-markdown--user a:hover { color: #ffffff; }
+
+/* Light bubble (violet-50 bg, used in home chat area) */
+.chat-markdown--light code { background: rgba(0,0,0,0.06); color: inherit; }
+.chat-markdown--light pre { background: rgba(0,0,0,0.05); color: inherit; }
+.chat-markdown--light pre code { background: none; }
+.chat-markdown--light blockquote { border-left-color: rgba(0,0,0,0.2); color: inherit; }
+.chat-markdown--light th,
+.chat-markdown--light td { border-bottom: 1px solid rgba(0,0,0,0.1); }
+.chat-markdown--light th { border-bottom: 2px solid rgba(0,0,0,0.15); }
+.chat-markdown--light hr { background: rgba(0,0,0,0.1); }
+.chat-markdown--light a { color: #7c3aed; }
+.chat-markdown--light a:hover { color: #6d28d9; }
