@@ -3,8 +3,196 @@
 // ---------------------------------------------------------------------------
 
 import { getStorage } from "@/lib/storage";
-import { getProvider } from "@/lib/llm";
-import type { ProviderName } from "@/lib/llm";
+import { GeminiProvider } from "@/lib/llm";
+import type { ToolDefinition, ToolCall } from "@/lib/llm";
+import * as fs from "fs";
+import * as path from "path";
+
+// ---------------------------------------------------------------------------
+// Tool definitions — what the LLM can call
+// ---------------------------------------------------------------------------
+
+const TOOL_DEFINITIONS: ToolDefinition[] = [
+  {
+    name: "list_tasks",
+    description:
+      "ユーザーのタスク一覧を取得する。未対応・進行中・完了などのステータスごとに確認できる。",
+    parameters: {
+      type: "object",
+      properties: {
+        status: {
+          type: "string",
+          description:
+            "フィルタするステータス（not_started, in_progress, done）。省略時は全件取得。",
+          enum: ["not_started", "in_progress", "done"],
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "search_codebase",
+    description:
+      "プロジェクトのソースコード（src/以下）をキーワード検索し、関連するコードの箇所を返す。APIの仕様や実装方法について質問されたときに使う。",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "検索キーワード（正規表現ではなく単純な文字列マッチ）",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "get_team_members",
+    description:
+      "チームメンバー（Anima）の一覧を取得する。名前・説明・タグ・ステータスを確認できる。",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Tool executor — dispatches tool calls to actual implementations
+// ---------------------------------------------------------------------------
+
+async function executeToolCall(
+  call: ToolCall,
+): Promise<unknown> {
+  switch (call.name) {
+    case "list_tasks":
+      return executeListTasks(call.args);
+    case "search_codebase":
+      return executeSearchCodebase(call.args);
+    case "get_team_members":
+      return executeGetTeamMembers();
+    default:
+      return { error: `Unknown tool: ${call.name}` };
+  }
+}
+
+// -- list_tasks ---------------------------------------------------------------
+
+async function executeListTasks(
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  try {
+    const supabase = getSupabaseClient();
+    let query = supabase
+      .from("tasks")
+      .select("text, status, assignee_name")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (args.status && typeof args.status === "string") {
+      query = query.eq("status", args.status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return { tasks: data ?? [] };
+  } catch {
+    // Fallback: try storage (in-memory)
+    return { tasks: [], note: "タスクストレージに接続できませんでした" };
+  }
+}
+
+function getSupabaseClient() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getSupabaseClient } = require("@/lib/supabase");
+  return getSupabaseClient();
+}
+
+// -- search_codebase ----------------------------------------------------------
+
+function executeSearchCodebase(
+  args: Record<string, unknown>,
+): { results: Array<{ file: string; matches: string[] }> } {
+  const query = String(args.query ?? "").toLowerCase();
+  if (!query) return { results: [] };
+
+  const srcDir = path.resolve(process.cwd(), "src");
+  const results: Array<{ file: string; matches: string[] }> = [];
+
+  // Recursively walk src/ and grep for the query
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Skip node_modules, .next, etc.
+        if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+        walk(fullPath);
+      } else if (
+        entry.isFile() &&
+        /\.(ts|tsx|js|jsx|json|css|md)$/.test(entry.name)
+      ) {
+        try {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          const lines = content.split("\n");
+          const matchingLines: string[] = [];
+
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().includes(query)) {
+              // Include line number and surrounding context
+              matchingLines.push(`L${i + 1}: ${lines[i].trimEnd()}`);
+              if (matchingLines.length >= 5) break; // Max 5 matches per file
+            }
+          }
+
+          if (matchingLines.length > 0) {
+            const relativePath = path.relative(srcDir, fullPath);
+            results.push({
+              file: `src/${relativePath}`,
+              matches: matchingLines,
+            });
+          }
+        } catch {
+          // Skip unreadable files
+        }
+      }
+    }
+  };
+
+  walk(srcDir);
+
+  // Return top 5 files with most matches
+  results.sort((a, b) => b.matches.length - a.matches.length);
+  return { results: results.slice(0, 5) };
+}
+
+// -- get_team_members ---------------------------------------------------------
+
+async function executeGetTeamMembers(): Promise<unknown> {
+  const storage = getStorage();
+  const animas = await storage.listAnimas();
+
+  return {
+    members: animas.map(({ systemPrompt: _, ...rest }) => ({
+      name: rest.name,
+      description: rest.description,
+      tags: rest.tags,
+      status: rest.status,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POST handler
+// ---------------------------------------------------------------------------
 
 export async function POST(
   request: Request,
@@ -13,7 +201,15 @@ export async function POST(
   const { id: roomId } = await params;
 
   try {
-    const body = await request.json();
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid or empty JSON body" }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
     const { content, animaId } = body as {
       content: string;
       animaId: string;
@@ -28,10 +224,10 @@ export async function POST(
 
     const storage = getStorage();
 
-    // Ensure room exists (auto-create for stub)
+    // Ensure room exists (auto-create if first message)
     let room = await storage.getRoom(roomId);
     if (!room) {
-      room = await storage.createRoom(animaId, "anonymous");
+      room = await storage.createRoom(animaId, "anonymous", roomId);
     }
 
     // Fetch anima for system prompt & LLM provider
@@ -54,27 +250,73 @@ export async function POST(
     // Build conversation history for the LLM
     const storedMessages = await storage.getMessages(roomId);
     const llmMessages = storedMessages.map((m) => ({
-      role: (m.senderType === "user" ? "user" : "assistant") as "user" | "assistant",
+      role: (m.senderType === "user" ? "user" : "assistant") as
+        | "user"
+        | "assistant",
       content: m.content,
     }));
 
-    // Get the appropriate LLM provider
-    const provider = getProvider(anima.llmProvider as ProviderName);
+    // LLM provider — Gemini 固定（1プロバイダー・1モデル）
+    const provider = new GeminiProvider();
 
-    // Stream the AI response via SSE
+    // Stream the AI response via SSE (with function-calling support)
     const encoder = new TextEncoder();
     let fullContent = "";
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const chunks = provider.streamChat(llmMessages, anima.systemPrompt);
+          // Use streamChatWithTools if available (function calling)
+          if (provider.streamChatWithTools) {
+            const events = provider.streamChatWithTools(
+              llmMessages,
+              anima.systemPrompt,
+              TOOL_DEFINITIONS,
+              executeToolCall,
+            );
 
-          for await (const chunk of chunks) {
-            fullContent += chunk;
-            // SSE format: data: <json>\n\n
-            const sseData = JSON.stringify({ type: "chunk", content: chunk });
-            controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+            for await (const event of events) {
+              switch (event.type) {
+                case "tool_call": {
+                  // Send a progress hint to the user while tool executes
+                  const toolHints: Record<string, string> = {
+                    list_tasks: "📋 タスクを確認しています...",
+                    search_codebase: "🔍 コードを検索しています...",
+                    get_team_members: "👥 メンバー情報を取得しています...",
+                  };
+                  const hint =
+                    toolHints[event.call.name] ?? "🔧 ツールを実行しています...";
+                  const hintData = JSON.stringify({
+                    type: "chunk",
+                    content: hint + "\n\n",
+                  });
+                  controller.enqueue(encoder.encode(`data: ${hintData}\n\n`));
+                  break;
+                }
+                case "tool_result":
+                  // Tool result is fed back to LLM internally — no SSE needed
+                  break;
+                case "text":
+                  fullContent += event.content;
+                  const chunkData = JSON.stringify({
+                    type: "chunk",
+                    content: event.content,
+                  });
+                  controller.enqueue(encoder.encode(`data: ${chunkData}\n\n`));
+                  break;
+              }
+            }
+          } else {
+            // Fallback: plain streaming without tools
+            const chunks = provider.streamChat(llmMessages, anima.systemPrompt);
+            for await (const chunk of chunks) {
+              fullContent += chunk;
+              const sseData = JSON.stringify({
+                type: "chunk",
+                content: chunk,
+              });
+              controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+            }
           }
 
           // Save the complete AI message

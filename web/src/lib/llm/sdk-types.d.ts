@@ -68,37 +68,134 @@ declare module "@anthropic-ai/sdk" {
 }
 
 declare module "@google/generative-ai" {
-  interface Part {
-    text: string;
+  // -- Schema types -----------------------------------------------------------
+  enum SchemaType {
+    STRING = "STRING",
+    NUMBER = "NUMBER",
+    INTEGER = "INTEGER",
+    BOOLEAN = "BOOLEAN",
+    ARRAY = "ARRAY",
+    OBJECT = "OBJECT",
   }
+
+  // -- Part types -------------------------------------------------------------
+  interface TextPart {
+    text: string;
+    functionCall?: never;
+    functionResponse?: never;
+  }
+
+  interface FunctionCall {
+    name: string;
+    args: Record<string, unknown>;
+  }
+
+  interface FunctionCallPart {
+    text?: never;
+    functionCall: FunctionCall;
+    functionResponse?: never;
+  }
+
+  interface FunctionResponse {
+    name: string;
+    response: unknown;
+  }
+
+  interface FunctionResponsePart {
+    text?: never;
+    functionCall?: never;
+    functionResponse: FunctionResponse;
+  }
+
+  type Part = TextPart | FunctionCallPart | FunctionResponsePart;
 
   interface Content {
     role: string;
     parts: Part[];
   }
 
+  // -- Tool definitions -------------------------------------------------------
+  interface FunctionDeclarationSchema {
+    type: SchemaType;
+    properties?: { [k: string]: FunctionDeclarationSchema };
+    required?: string[];
+    description?: string;
+    items?: FunctionDeclarationSchema;
+    enum?: string[];
+  }
+
+  interface FunctionDeclaration {
+    name: string;
+    description: string;
+    parameters?: FunctionDeclarationSchema;
+  }
+
+  interface FunctionDeclarationsTool {
+    functionDeclarations?: FunctionDeclaration[];
+  }
+
+  type Tool = FunctionDeclarationsTool;
+
+  interface FunctionCallingConfig {
+    mode?: FunctionCallingMode;
+    allowedFunctionNames?: string[];
+  }
+
+  enum FunctionCallingMode {
+    AUTO = "AUTO",
+    ANY = "ANY",
+    NONE = "NONE",
+  }
+
+  interface ToolConfig {
+    functionCallingConfig: FunctionCallingConfig;
+  }
+
+  // -- Response types ---------------------------------------------------------
   interface UsageMetadata {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
     totalTokenCount?: number;
   }
 
+  interface Candidate {
+    content: Content;
+  }
+
   interface GenerateContentResponse {
     text(): string;
+    functionCalls(): FunctionCall[] | undefined;
     usageMetadata?: UsageMetadata;
+    candidates?: Candidate[];
+  }
+
+  interface GenerateContentResult {
+    response: GenerateContentResponse;
   }
 
   interface GenerateContentStreamResult {
     stream: AsyncIterable<{ text(): string }>;
+    response: Promise<GenerateContentResponse>;
+  }
+
+  // -- Chat & Model -----------------------------------------------------------
+  interface StartChatParams {
+    history?: Content[];
+    tools?: Tool[];
+    toolConfig?: ToolConfig;
   }
 
   interface ChatSession {
-    sendMessage(message: string): Promise<{ response: GenerateContentResponse }>;
-    sendMessageStream(message: string): Promise<GenerateContentStreamResult>;
+    sendMessage(
+      request: string | Array<string | Part>,
+    ): Promise<GenerateContentResult>;
+    sendMessageStream(
+      request: string | Array<string | Part>,
+    ): Promise<GenerateContentStreamResult>;
   }
 
   interface GenerativeModel {
-    startChat(params?: { history?: Content[] }): ChatSession;
+    startChat(params?: StartChatParams): ChatSession;
   }
 
   export class GoogleGenerativeAI {
@@ -106,6 +203,8 @@ declare module "@google/generative-ai" {
     getGenerativeModel(params: {
       model: string;
       systemInstruction?: string;
+      tools?: Tool[];
+      toolConfig?: ToolConfig;
     }): GenerativeModel;
   }
 }

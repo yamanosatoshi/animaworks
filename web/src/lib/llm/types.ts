@@ -36,6 +36,51 @@ export interface CompletionResult {
 }
 
 // ---------------------------------------------------------------------------
+// Tool / Function-calling types
+// ---------------------------------------------------------------------------
+
+/** Schema property for tool parameters */
+export interface ToolParameterProperty {
+  type: "string" | "number" | "boolean" | "array" | "object";
+  description: string;
+  enum?: string[];
+}
+
+/** Definition of a tool the LLM can call */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, ToolParameterProperty>;
+    required: string[];
+  };
+}
+
+/** A tool call requested by the LLM */
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+/** Result of executing a tool call */
+export interface ToolResult {
+  name: string;
+  result: unknown;
+}
+
+/**
+ * Events yielded during a streamChatWithTools session.
+ * - "text"       : streamed text chunk from the LLM
+ * - "tool_call"  : LLM wants to call a tool (caller should execute & feed back)
+ * - "tool_result": tool result has been fed back to the LLM
+ */
+export type ToolStreamEvent =
+  | { type: "text"; content: string }
+  | { type: "tool_call"; call: ToolCall }
+  | { type: "tool_result"; result: ToolResult };
+
+// ---------------------------------------------------------------------------
 // Abstract interface
 // ---------------------------------------------------------------------------
 
@@ -60,4 +105,19 @@ export interface LLMProvider {
     messages: ChatMessage[],
     systemPrompt: string,
   ): Promise<CompletionResult>;
+
+  /**
+   * Stream a chat completion with function-calling (tool use).
+   * Handles the tool-call loop internally:
+   *   1. Send messages to LLM
+   *   2. If LLM returns a function call → execute via toolExecutor → feed result back
+   *   3. Repeat until LLM returns final text
+   * Yields ToolStreamEvents so the caller can track progress.
+   */
+  streamChatWithTools?(
+    messages: ChatMessage[],
+    systemPrompt: string,
+    tools: ToolDefinition[],
+    toolExecutor: (call: ToolCall) => Promise<unknown>,
+  ): AsyncGenerator<ToolStreamEvent, void, unknown>;
 }

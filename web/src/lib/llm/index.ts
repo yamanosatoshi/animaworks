@@ -2,7 +2,18 @@
 // LLM Provider — Factory & re-exports
 // ---------------------------------------------------------------------------
 
-export type { LLMProvider, ChatMessage, ChatRole, CompletionResult, CompletionMeta } from "./types";
+export type {
+  LLMProvider,
+  ChatMessage,
+  ChatRole,
+  CompletionResult,
+  CompletionMeta,
+  ToolDefinition,
+  ToolCall,
+  ToolResult,
+  ToolStreamEvent,
+  ToolParameterProperty,
+} from "./types";
 
 import type { LLMProvider } from "./types";
 import { ClaudeProvider } from "./claude-provider";
