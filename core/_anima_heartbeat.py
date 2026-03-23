@@ -14,7 +14,6 @@ import json
 import logging
 import math
 import re
-import time
 from typing import Any
 
 from core.i18n import t
@@ -28,24 +27,14 @@ from core.time_utils import now_iso, now_local
 logger = logging.getLogger("animaworks.anima")
 
 
-def _calc_effective_max_turns(
-    base_max_turns: int,
-    activity_level: int,
-    hb_max_turns: int | None = None,
-) -> int | None:
+def _calc_effective_max_turns(base_max_turns: int, activity_level: int) -> int | None:
     """Calculate effective max_turns for heartbeat based on activity level.
 
-    When *hb_max_turns* is provided (from ``config.heartbeat.max_turns``),
-    it is used as the base instead of the per-anima chat ``max_turns``.
-
-    Below 100%: linear scale (floor 3). At/above 100%: return None (use base).
+    Below 100%: linear scale (floor 3). At/above 100%: no change (None = use base).
     """
-    base = hb_max_turns if hb_max_turns is not None else base_max_turns
     if activity_level >= 100:
-        if hb_max_turns is not None:
-            return hb_max_turns
         return None
-    scaled = max(3, math.ceil(base * activity_level / 100))
+    scaled = max(3, math.ceil(base_max_turns * activity_level / 100))
     return scaled
 
 
@@ -102,7 +91,7 @@ class HeartbeatMixin:
           2. config.heartbeat.default_model (global)
           3. None (use main model)
         """
-        from core.config.models import load_config, resolve_execution_mode
+        from core.config.models import load_config
         from core.schemas import ModelConfig
 
         bg_model = self.agent.model_config.background_model
@@ -114,18 +103,12 @@ class HeartbeatMixin:
         if bg_model == self.agent.model_config.model:
             return None
 
-        # Recalculate resolved_mode for the background model so that
-        # the correct executor type is created (e.g. claude-* → S, codex/* → C).
-        # Without this, model_copy carries the main model's resolved_mode,
-        # which may be incompatible with the background model name.
-        config = load_config()
-        bg_resolved_mode = resolve_execution_mode(config, bg_model)
-
         bg_credential = self.agent.model_config.background_credential
         new_config: ModelConfig = self.agent.model_config.model_copy(
-            update={"model": bg_model, "resolved_mode": bg_resolved_mode},
+            update={"model": bg_model},
         )
         if bg_credential:
+            config = load_config()
             if bg_credential in config.credentials:
                 cred = config.credentials[bg_credential]
                 new_config.api_key = cred.api_key or None
@@ -209,16 +192,11 @@ class HeartbeatMixin:
         conv = ConversationMemory(self.anima_dir, self.model_config)
         return conv.build_structured_messages(prompt_text)
 
-    def _build_background_context_parts(self, include_dialogue: bool = True) -> list[str]:
+    def _build_background_context_parts(self) -> list[str]:
         """Build shared context parts for background-auto sessions (heartbeat/cron).
 
         Collects: recovery note, background task notifications, heartbeat
         history, reflections, dialogue context, subordinate check.
-
-        Args:
-            include_dialogue: If True, inject recent chat dialogue turns.
-                Set to False for cron tasks to prevent chat context leaking
-                into scheduled task execution.
         """
         parts: list[str] = []
 
@@ -255,39 +233,38 @@ class HeartbeatMixin:
             parts.append(load_prompt("fragments/recent_reflections") + "\n\n" + reflection_text)
 
         # Inject recent dialogue context for cross-session continuity
-        if include_dialogue:
-            try:
-                conv_mem = ConversationMemory(self.anima_dir, self.model_config)
-                state = conv_mem.load()
-                recent_turns = state.turns[-5:] if state.turns else []
-                if recent_turns and self.agent.execution_mode == "c":
-                    continuation_prompt = load_prompt("session_continuation")
-                    recent_turns = [
-                        turn for turn in recent_turns
-                        if not (
-                            turn.role == "human"
-                            and _is_session_continuation_turn(
-                                turn.content, continuation_prompt,
-                            )
+        try:
+            conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+            state = conv_mem.load()
+            recent_turns = state.turns[-5:] if state.turns else []
+            if recent_turns and self.agent.execution_mode == "c":
+                continuation_prompt = load_prompt("session_continuation")
+                recent_turns = [
+                    turn for turn in recent_turns
+                    if not (
+                        turn.role == "human"
+                        and _is_session_continuation_turn(
+                            turn.content, continuation_prompt,
                         )
-                    ]
-                if recent_turns:
-                    conv_lines = []
-                    for turn in recent_turns:
-                        snippet = turn.content[:200]
-                        conv_lines.append(f"- [{turn.role}] {snippet}")
-                    conv_summary = "\n".join(conv_lines)
-                    parts.append(
-                        t("agent.recent_dialogue_header")
-                        + "\n\n"
-                        + t("agent.recent_dialogue_intro")
-                        + "\n"
-                        + t("agent.recent_dialogue_consider")
-                        + "\n\n"
-                        + conv_summary
                     )
-            except Exception:
-                logger.debug("[%s] Failed to load dialogue context", self.name, exc_info=True)
+                ]
+            if recent_turns:
+                conv_lines = []
+                for turn in recent_turns:
+                    snippet = turn.content[:200]
+                    conv_lines.append(f"- [{turn.role}] {snippet}")
+                conv_summary = "\n".join(conv_lines)
+                parts.append(
+                    t("agent.recent_dialogue_header")
+                    + "\n\n"
+                    + t("agent.recent_dialogue_intro")
+                    + "\n"
+                    + t("agent.recent_dialogue_consider")
+                    + "\n\n"
+                    + conv_summary
+                )
+        except Exception:
+            logger.debug("[%s] Failed to load dialogue context", self.name, exc_info=True)
 
         # ── Subordinate management check for animas with subordinates ──
         try:
@@ -313,36 +290,15 @@ class HeartbeatMixin:
 
         return parts
 
-    _CURRENT_TASK_CLEANUP_THRESHOLD = 3000
-
     async def _build_heartbeat_prompt(self) -> list[str]:
         """Build heartbeat prompt parts.
 
         Heartbeat-specific header + shared background context.
-        When current_task.md exceeds the cleanup threshold, a compression
-        instruction is prepended so the anima trims it first.
         """
         hb_config = self.memory.read_heartbeat_config()
         checklist = hb_config or load_prompt("heartbeat_default_checklist")
         task_delegation_rules = load_prompt("task_delegation_rules")
         parts = [load_prompt("heartbeat", checklist=checklist, task_delegation_rules=task_delegation_rules)]
-
-        state = self.memory.read_current_state()
-        state_len = len(state)
-        if state_len > self._CURRENT_TASK_CLEANUP_THRESHOLD:
-            parts.append(
-                t(
-                    "heartbeat.current_task_cleanup_required",
-                    current_chars=state_len,
-                    max_chars=self._CURRENT_TASK_CLEANUP_THRESHOLD,
-                )
-            )
-            logger.info(
-                "[%s] current_task.md exceeds threshold (%d > %d), injecting cleanup instruction",
-                self.name,
-                state_len,
-                self._CURRENT_TASK_CLEANUP_THRESHOLD,
-            )
 
         parts.extend(self._build_background_context_parts())
 
@@ -376,8 +332,8 @@ class HeartbeatMixin:
         if command_output:
             parts.append(load_prompt("fragments/command_output", output=command_output))
 
-        # Shared background context (without dialogue — cron tasks must not inherit chat context)
-        parts.extend(self._build_background_context_parts(include_dialogue=False))
+        # Shared background context (same as heartbeat)
+        parts.extend(self._build_background_context_parts())
 
         return "\n\n".join(parts)
 
@@ -439,46 +395,16 @@ class HeartbeatMixin:
             from core.config.models import load_config as _load_config_fresh
 
             _cfg = _load_config_fresh()
-            _hb_cfg = _cfg.heartbeat
             effective_max_turns = _calc_effective_max_turns(
                 base_max_turns=self.agent.model_config.max_turns,
                 activity_level=_cfg.activity_level,
-                hb_max_turns=_hb_cfg.max_turns,
             )
-
-            _soft_timeout = _hb_cfg.soft_timeout_seconds
-            _hard_timeout = _hb_cfg.hard_timeout_seconds
-            _start = time.monotonic()
-            _soft_warned = False
-            _hard_exceeded = False
-
             async for chunk in self.agent.run_cycle_streaming(
                 prompt,
                 trigger="heartbeat",
                 prior_messages=prior_messages,
                 max_turns_override=effective_max_turns,
             ):
-                # ── Timeout checks (Mode A: reminder_queue injection) ──
-                _elapsed = time.monotonic() - _start
-                if not _soft_warned and _elapsed > _soft_timeout:
-                    _soft_warned = True
-                    self.agent._executor.reminder_queue.push_sync(t("reminder.hb_time_limit"))
-                    logger.info(
-                        "[%s] Heartbeat soft timeout reached (%.0fs > %ds)",
-                        self.name,
-                        _elapsed,
-                        _soft_timeout,
-                    )
-                if _elapsed > _hard_timeout:
-                    _hard_exceeded = True
-                    logger.warning(
-                        "[%s] Heartbeat hard timeout reached (%.0fs > %ds) — breaking",
-                        self.name,
-                        _elapsed,
-                        _hard_timeout,
-                    )
-                    break
-
                 # Relay text_delta chunks to waiting user stream
                 if chunk.get("type") == "text_delta":
                     accumulated_text += chunk.get("text", "")
@@ -496,18 +422,6 @@ class HeartbeatMixin:
                         total_turns=cycle_result.get("total_turns", 0),
                     )
                     journal.finalize(summary=result.summary[:500])
-
-            # ── Hard timeout: write recovery note ──
-            if _hard_exceeded:
-                try:
-                    recovery_path = self.anima_dir / "state" / "recovery_note.md"
-                    recovery_path.write_text(
-                        t("reminder.hb_hard_timeout_recovery", timeout=_hard_timeout),
-                        encoding="utf-8",
-                    )
-                    logger.info("[%s] Hard timeout recovery note saved", self.name)
-                except Exception:
-                    logger.debug("[%s] Failed to save hard timeout recovery note", self.name, exc_info=True)
 
             if result is None:
                 result = CycleResult(
@@ -565,25 +479,6 @@ class HeartbeatMixin:
                 checkpoint_path.unlink(missing_ok=True)
             except Exception:
                 logger.debug("[%s] Failed to remove heartbeat checkpoint", self.name, exc_info=True)
-
-            # Compact task queue after heartbeat
-            try:
-                from core.memory.task_queue import TaskQueueManager
-
-                _tqm = TaskQueueManager(self.anima_dir)
-                _removed = _tqm.compact()
-                if _removed:
-                    logger.info(
-                        "[%s] Task queue compacted after heartbeat: removed %d tasks",
-                        self.name,
-                        _removed,
-                    )
-            except Exception:
-                logger.debug(
-                    "[%s] Task queue compaction failed after heartbeat",
-                    self.name,
-                    exc_info=True,
-                )
 
             return result
         finally:

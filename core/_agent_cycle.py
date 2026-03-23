@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 from core._agent_prompt_log import _save_prompt_log, _save_prompt_log_end
 from core.i18n import t
 from core.memory.shortterm import SessionState, ShortTermMemory
+from core.paths import load_prompt
 from core.prompt.builder import build_system_prompt, inject_shortterm
 from core.prompt.context import ContextTracker
 from core.schemas import CycleResult, ImageData
@@ -264,8 +265,6 @@ class CycleMixin:
                 action="responded",
                 summary=result.text,
                 duration_ms=duration_ms,
-                context_window=tracker.context_window,
-                context_threshold=tracker.threshold,
                 tool_call_records=_tool_records_to_dicts(result),
                 usage=_b_usage,
             )
@@ -311,8 +310,6 @@ class CycleMixin:
                 summary=result.text,
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
-                context_window=tracker.context_window,
-                context_threshold=tracker.threshold,
                 tool_call_records=_tool_records_to_dicts(result),
                 usage=_c_usage,
             )
@@ -357,8 +354,6 @@ class CycleMixin:
                 summary=result.text,
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
-                context_window=tracker.context_window,
-                context_threshold=tracker.threshold,
                 tool_call_records=_tool_records_to_dicts(result),
                 usage=_a_usage,
             )
@@ -367,7 +362,7 @@ class CycleMixin:
         # Pre-flight: check prompt size to prevent Agent SDK buffer overflow
         from core.memory.conversation import ConversationMemory
 
-        conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
+        conv_memory = ConversationMemory(self.anima_dir, self.model_config)
         system_prompt, prompt, use_fallback = await self._preflight_size_check(
             system_prompt,
             prompt,
@@ -422,14 +417,16 @@ class CycleMixin:
         chain_count = 0
         accumulated_text = result.text
 
-        if tracker.threshold_exceeded:
-            # Save shortterm for the next message to pick up via inject_shortterm.
-            # Do NOT chain here — chaining mid-response causes the LLM to produce
-            # unnatural "session handoff" messages.
+        while tracker.threshold_exceeded and chain_count < self.model_config.max_chains:
+            session_chained = True
+            chain_count += 1
             logger.info(
-                "Session context at %.1f%% — saving shortterm, will resume on next message",
+                "Session chain %d/%d: context at %.1f%%",
+                chain_count,
+                self.model_config.max_chains,
                 tracker.usage_ratio * 100,
             )
+
             shortterm.clear()
             shortterm.save(
                 SessionState(
@@ -442,22 +439,63 @@ class CycleMixin:
                     turn_count=result_msg.num_turns if result_msg else 0,
                 )
             )
-            # Clear SDK session ID so the next session starts fresh
+
+            tracker.reset()
+            # Clear SDK session ID so the chained session starts fresh
             if mode == "s":
                 try:
-                    from core.execution._sdk_session import (
-                        _RESUMABLE_SESSION_TYPES,
-                        _clear_session_id,
-                        _resolve_session_type,
-                    )
+                    from core.execution.agent_sdk import clear_session_ids
 
-                    _st = _resolve_session_type(trigger)
-                    if _st in _RESUMABLE_SESSION_TYPES:
-                        _clear_session_id(self.anima_dir, _st, thread_id)
+                    clear_session_ids(self.anima_dir, thread_id)
                 except Exception:
-                    logger.debug("Failed to clear session ID for deferred chain", exc_info=True)
-        else:
-            shortterm.clear()
+                    logger.debug("Failed to clear session IDs for chain", exc_info=True)
+            # Force TIER_LIGHT on chained sessions to reduce system prompt floor
+            _chain_cw = min(_ctx_window, 32_000)
+            system_prompt_2 = inject_shortterm(
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                    message=prompt,
+                    retriever=self._get_retriever(),
+                    trigger=trigger,
+                    context_window=_chain_cw,
+                    pending_human_notifications=pending_human_notifications,
+                ).system_prompt,
+                shortterm,
+            )
+            continuation_prompt = load_prompt("session_continuation")
+            try:
+                result_2 = await self._executor.execute(
+                    prompt=continuation_prompt,
+                    system_prompt=system_prompt_2,
+                    tracker=tracker,
+                    max_turns_override=max_turns_override,
+                    thread_id=thread_id,
+                )
+                # Merge from chained session too
+                if result_2.replied_to_from_transcript:
+                    self._tool_handler.merge_replied_to(result_2.replied_to_from_transcript)
+            except Exception:
+                logger.exception(
+                    "Chained session %d failed; preserving short-term memory",
+                    chain_count,
+                )
+                break
+            accumulated_text = accumulated_text + "\n" + result_2.text
+            accumulated_tool_records.extend(_tool_records_to_dicts(result_2))
+            if result_2.usage:
+                if result.usage:
+                    result.usage.merge(result_2.usage)
+                else:
+                    result.usage = result_2.usage
+            result_msg = result_2.result_message
+            if result_msg:
+                total_turns += result_msg.num_turns
+
+        shortterm.clear()
 
         _save_prompt_log_end(
             self.anima_dir,
@@ -490,8 +528,6 @@ class CycleMixin:
             summary=accumulated_text,
             duration_ms=duration_ms,
             context_usage_ratio=tracker.usage_ratio,
-            context_window=tracker.context_window,
-            context_threshold=tracker.threshold,
             session_chained=session_chained,
             total_turns=total_turns,
             tool_call_records=accumulated_tool_records,
@@ -641,7 +677,7 @@ class CycleMixin:
         # Pre-flight size check for streaming path
         from core.memory.conversation import ConversationMemory
 
-        conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
+        conv_memory = ConversationMemory(self.anima_dir, self.model_config)
         system_prompt, prompt, use_fallback = await self._preflight_size_check(
             system_prompt,
             prompt,
@@ -694,8 +730,6 @@ class CycleMixin:
         )
 
         # ── Stream retry configuration ────────────────────
-        from core.paths import load_prompt
-
         retry_cfg = self._load_stream_retry_config()
         checkpoint_enabled = retry_cfg["checkpoint_enabled"]
         max_retries = retry_cfg["retry_max"]
@@ -826,15 +860,9 @@ class CycleMixin:
 
                             clear_codex_thread_ids(self.anima_dir, thread_id)
                         else:
-                            from core.execution._sdk_session import (
-                                _RESUMABLE_SESSION_TYPES,
-                                _clear_session_id,
-                                _resolve_session_type,
-                            )
+                            from core.execution.agent_sdk import clear_session_ids
 
-                            _st_retry = _resolve_session_type(trigger)
-                            if _st_retry in _RESUMABLE_SESSION_TYPES:
-                                _clear_session_id(self.anima_dir, _st_retry, thread_id)
+                            clear_session_ids(self.anima_dir, thread_id)
                         logger.info("Session IDs cleared for retry 1 (fresh session forced)")
                     except Exception as e:
                         logger.warning("Failed to clear session IDs for retry: %s", e)
@@ -892,7 +920,7 @@ class CycleMixin:
         # Session chaining — force_chain from mid-session auto-compact.
         if _stream_force_chain and not tracker.threshold_exceeded:
             tracker.force_threshold()
-            logger.info("Context auto-compact (stream): forcing threshold_exceeded")
+            logger.info("Context auto-compact (stream): forcing threshold_exceeded for session chaining")
 
         while tracker.threshold_exceeded and chain_count < self.model_config.max_chains:
             session_chained = True
@@ -924,18 +952,11 @@ class CycleMixin:
             # (resume would reload the full conversation history, defeating compaction)
             if mode == "s":
                 try:
-                    from core.execution._sdk_session import (
-                        _RESUMABLE_SESSION_TYPES,
-                        _clear_session_id,
-                        _resolve_session_type,
-                    )
+                    from core.execution.agent_sdk import clear_session_ids
 
-                    _st = _resolve_session_type(trigger)
-                    if _st in _RESUMABLE_SESSION_TYPES:
-                        _clear_session_id(self.anima_dir, _st, thread_id)
+                    clear_session_ids(self.anima_dir, thread_id)
                 except Exception:
                     logger.debug("Failed to clear session IDs for chain", exc_info=True)
-
             # Force TIER_LIGHT on chained sessions to reduce system prompt floor
             _chain_cw = min(_ctx_window_s, 32_000)
             system_prompt_2 = inject_shortterm(
@@ -1021,8 +1042,6 @@ class CycleMixin:
                 thinking_text=thinking_text[:10000],
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
-                context_window=tracker.context_window,
-                context_threshold=tracker.threshold,
                 session_chained=session_chained,
                 total_turns=total_turns,
                 tool_call_records=all_tool_call_records,
