@@ -147,6 +147,17 @@ function OverlappingAvatars({ members }: { members: BoardMember[] }) {
   );
 }
 
+/** Typing indicator — three bouncing dots */
+function TypingIndicator() {
+  return (
+    <div className="mt-1 flex items-center gap-1 px-3 py-2 rounded-lg bg-violet-50 w-fit">
+      <span className="h-2 w-2 rounded-full bg-accent animate-bounce [animation-delay:0ms]" />
+      <span className="h-2 w-2 rounded-full bg-accent animate-bounce [animation-delay:150ms]" />
+      <span className="h-2 w-2 rounded-full bg-accent animate-bounce [animation-delay:300ms]" />
+    </div>
+  );
+}
+
 /** Left panel — Board list */
 function BoardList({
   boards,
@@ -296,11 +307,15 @@ function ChatArea({
                   )}
                 </div>
                 {msg.isAI ? (
-                  <div className="chat-markdown chat-markdown--light mt-1 text-sm leading-relaxed text-accent-dark rounded-lg bg-violet-50 px-3 py-2">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content || (msg.isStreaming ? "..." : "")}
-                    </ReactMarkdown>
-                  </div>
+                  msg.isStreaming && !msg.content ? (
+                    <TypingIndicator />
+                  ) : (
+                    <div className="chat-markdown chat-markdown--light mt-1 text-sm leading-relaxed text-accent-dark rounded-lg bg-violet-50 px-3 py-2">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )
                 ) : (
                   <p className="mt-1 text-sm leading-relaxed text-text-secondary">
                     {msg.content}
